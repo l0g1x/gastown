@@ -1,6 +1,8 @@
 # Gas Town Architecture
 
-Gas Town is a multi-agent workspace manager that coordinates AI coding agents working on software projects. It provides the infrastructure for running swarms of agents, managing their lifecycle, and coordinating their work through mail and issue tracking.
+Gas Town is a multi-agent workspace manager that coordinates AI coding agents working on software projects. It provides the infrastructure for spawning workers, processing work through a priority queue, and coordinating agents through mail and issue tracking.
+
+**Key insight**: Work is a stream, not discrete batches. The Refinery's merge queue is the coordination mechanism. Beads (issues) are the data plane. There are no "swarm IDs" - just epics with children, processed by workers, merged through the queue.
 
 ## System Overview
 
@@ -65,7 +67,7 @@ The **Overseer** is the human operator of Gas Town - not an AI agent, but the pe
 
 - **Sets strategy**: Defines project goals and priorities
 - **Provisions resources**: Adds machines, polecats, and rigs
-- **Reviews output**: Approves swarm results and merged code
+- **Reviews output**: Approves merged code and completed work
 - **Handles escalations**: Makes final decisions on stuck or ambiguous work
 - **Operates the system**: Runs `gt` commands, monitors dashboards
 
@@ -77,7 +79,7 @@ Gas Town has four AI agent roles:
 
 | Agent | Scope | Responsibility |
 |-------|-------|----------------|
-| **Mayor** | Town-wide | Global coordination, swarm dispatch, cross-rig decisions |
+| **Mayor** | Town-wide | Global coordination, work dispatch, cross-rig decisions |
 | **Witness** | Per-rig | Worker lifecycle, nudging, pre-kill verification, session cycling |
 | **Refinery** | Per-rig | Merge queue processing, PR review, integration |
 | **Polecat** | Per-rig | Implementation work on assigned issues |
@@ -94,10 +96,10 @@ Agents communicate via **mail** - JSONL-based inboxes for asynchronous messaging
 flowchart LR
     subgraph "Communication Flows"
         direction LR
-        Mayor -->|"dispatch swarm"| Refinery
-        Refinery -->|"assign work"| Polecat
+        Mayor -->|"dispatch work"| Refinery
+        Refinery -->|"assign issue"| Polecat
         Polecat -->|"done signal"| Witness
-        Witness -->|"swarm complete"| Mayor
+        Witness -->|"work complete"| Mayor
         Witness -->|"escalation"| Mayor
         Mayor -->|"escalation"| Overseer["👤 Overseer"]
     end
@@ -309,7 +311,7 @@ For reference without mermaid rendering:
 Agents live IN rigs rather than in a central location:
 - **Locality**: Each agent works in the context of its rig
 - **Independence**: Rigs can be added/removed without restructuring
-- **Parallelism**: Multiple rigs can have active swarms simultaneously
+- **Parallelism**: Multiple rigs can have active workers simultaneously
 - **Simplicity**: Agent finds its context by looking at its own directory
 
 ## Agent Responsibilities
@@ -317,7 +319,7 @@ Agents live IN rigs rather than in a central location:
 ### Mayor
 
 The Mayor is the global coordinator:
-- **Swarm dispatch**: Decides which rigs need swarms, what work to assign
+- **Work dispatch**: Spawns workers for issues, coordinates batch work on epics
 - **Cross-rig coordination**: Routes work between rigs when needed
 - **Escalation handling**: Resolves issues Witnesses can't handle
 - **Strategic decisions**: Architecture, priorities, integration planning
@@ -423,28 +425,33 @@ Polecats are the workers that do actual implementation:
 
 ## Key Workflows
 
-### Swarm Dispatch
+### Work Dispatch
+
+Work flows through the system as a stream. The Overseer spawns workers, they process issues, and completed work enters the merge queue.
 
 ```mermaid
 sequenceDiagram
     participant O as 👤 Overseer
     participant M as 🎩 Mayor
-    participant R as 🔧 Refinery
+    participant W as 👁 Witness
     participant P as 🐱 Polecats
+    participant R as 🔧 Refinery
 
-    O->>M: Start swarm on issues
-    M->>R: Dispatch swarm
-    R->>P: Assign issues
+    O->>M: Spawn workers for epic
+    M->>W: Assign issues to workers
+    W->>P: Start work
 
-    loop For each polecat
+    loop For each worker
         P->>P: Work on issue
-        P->>R: PR ready
+        P->>R: Submit to merge queue
         R->>R: Review & merge
     end
 
-    R->>M: Swarm complete
+    R->>M: All work merged
     M->>O: Report results
 ```
+
+**Note**: There is no "swarm ID" or batch boundary. Workers process issues independently. The merge queue handles coordination. "Swarming an epic" is just spawning multiple workers for the epic's child issues.
 
 ### Worker Cleanup (Witness-Owned)
 
@@ -640,31 +647,35 @@ export BEADS_NO_DAEMON=1
 
 **See also**: beads docs/WORKTREES.md and docs/DAEMON.md for details.
 
-### 11. Beads as Swarm State (No Separate Database)
+### 11. Work is a Stream (No Swarm IDs)
 
-**Decision**: Swarm state is encoded in beads epics and issues, not a separate SQLite database.
+**Decision**: Work state is encoded in beads epics and issues. There are no "swarm IDs" or separate swarm infrastructure - the epic IS the grouping, the merge queue IS the coordination.
 
 **Rationale**:
 - **No new infrastructure**: Beads already provides hierarchy, dependencies, status, priority
 - **Shared state**: All rig agents share the same `.beads/` via BEADS_DIR
 - **Queryable**: `bd ready` finds work with no blockers, enabling multi-wave orchestration
-- **Auditable**: Beads history shows swarm progression
+- **Auditable**: Beads history shows work progression
 - **Resilient**: Beads sync handles multi-agent conflicts
+- **No boundary problem**: When does a swarm start/end? Who's in it? These questions dissolve - work is a stream
 
 **How it works**:
-- Swarm creation files a parent epic with child issues for each task
+- Create an epic with child issues for batch work
 - Dependencies encode ordering (task B depends on task A)
 - Status transitions track progress (open → in_progress → closed)
 - Witness queries `bd ready` to find next available work
-- Swarm completion = all child issues closed
+- Spawn workers as needed - add more anytime
+- Batch complete = all child issues closed (or just keep going)
 
-**Example**: Instead of `<rig>/swarms/<id>/manifest.json`:
+**Example**: Batch work on authentication bugs:
 ```
-bd-swarm-xyz              # Epic: "Swarm: Fix authentication bugs"
-├── bd-swarm-xyz.1        # "Fix login timeout" (ready, no deps)
-├── bd-swarm-xyz.2        # "Fix session expiry" (ready, no deps)
-└── bd-swarm-xyz.3        # "Update auth tests" (blocked by .1 and .2)
+gt-auth-epic              # Epic: "Fix authentication bugs"
+├── gt-auth-epic.1        # "Fix login timeout" (ready, no deps)
+├── gt-auth-epic.2        # "Fix session expiry" (ready, no deps)
+└── gt-auth-epic.3        # "Update auth tests" (blocked by .1 and .2)
 ```
+
+Workers process issues independently. Work flows through the merge queue. No "swarm ID" needed - the epic provides grouping, labels provide ad-hoc queries, dependencies provide sequencing.
 
 ### 12. Agent Session Lifecycle (Daemon Protection)
 
@@ -739,17 +750,17 @@ sequenceDiagram
 - If at limit, wait for workers to complete
 - Prioritize higher-priority ready issues
 
-## Multi-Wave Swarms
+## Multi-Wave Work Processing
 
-For large task trees (like implementing GGT itself), swarms can process multiple "waves" of work automatically.
+For large task trees (like implementing GGT itself), workers can process multiple "waves" of work automatically based on the dependency graph.
 
 ### Wave Orchestration
 
-A wave is not explicitly managed - it emerges from the dependency graph:
+A wave is not explicitly managed - it emerges from dependencies:
 
 1. **Wave 1**: All issues with no dependencies (`bd ready`)
 2. **Wave 2**: Issues whose dependencies are now closed
-3. **Wave N**: Continue until epic is complete
+3. **Wave N**: Continue until all work is done
 
 ```mermaid
 graph TD
@@ -775,7 +786,7 @@ graph TD
     E --> F
 ```
 
-### Witness Multi-Wave Loop
+### Witness Work Loop
 
 ```
 while epic has open issues:
@@ -793,7 +804,7 @@ while epic has open issues:
 
     monitor workers, handle completions
 
-epic complete - initiate landing
+all work complete - report to Mayor
 ```
 
 ### Long-Running Autonomy
@@ -806,6 +817,8 @@ With daemon session cycling, the system can run autonomously for extended period
 - **Daemon persistence**: Survives all agent restarts
 
 The daemon is the only truly persistent component. All agents are ephemeral sessions that hand off state via mail.
+
+Work is a continuous stream - you can add new issues, spawn new workers, reprioritize the queue, all without "starting a new swarm" or managing batch boundaries.
 
 ## Configuration
 
@@ -965,7 +978,7 @@ Existing agents can be configured to notify plugins at specific points. This is 
 | Workflow Point | Agent | Example Plugin |
 |----------------|-------|----------------|
 | Before merge processing | Refinery | merge-oracle |
-| Before swarm dispatch | Mayor | plan-oracle |
+| Before work dispatch | Mayor | plan-oracle |
 | On worker stuck | Witness | debug-oracle |
 | On PR ready | Refinery | review-oracle |
 
@@ -1036,7 +1049,7 @@ Gas Town is designed for resilience. Common failure modes and their recovery:
 | Git dirty state | Witness pre-kill check fails | Nudge worker, or manual commit/discard |
 | Beads sync conflict | `bd sync` fails | Beads tombstones handle most cases |
 | Tmux crash | All sessions inaccessible | `gt doctor --fix` cleans up |
-| Stuck swarm | No progress for 30+ minutes | Witness escalates, Overseer intervenes |
+| Stuck work | No progress for 30+ minutes | Witness escalates, Overseer intervenes |
 | Disk full | Write operations fail | Clean logs, remove old clones |
 
 ### Recovery Principles
@@ -1053,7 +1066,7 @@ Gas Town is designed for resilience. Common failure modes and their recovery:
 
 **Workspace checks**: Config validity, Mayor mailbox, rig registry
 **Rig checks**: Git state, clone health, Witness/Refinery presence
-**Swarm checks**: Stuck detection, zombie sessions, heartbeat health
+**Work checks**: Stuck detection, zombie sessions, heartbeat health
 
 Run `gt doctor` regularly. Run `gt doctor --fix` to auto-repair issues.
 
