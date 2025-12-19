@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,12 +20,15 @@ var (
 	mailSubject     string
 	mailBody        string
 	mailPriority    string
+	mailType        string
+	mailReplyTo     string
 	mailNotify      bool
 	mailInboxJSON   bool
 	mailReadJSON    bool
 	mailInboxUnread bool
 	mailCheckInject bool
 	mailCheckJSON   bool
+	mailThreadJSON  bool
 )
 
 var mailCmd = &cobra.Command{
@@ -46,10 +51,21 @@ Addresses:
   <rig>/<polecat>  - Send to a specific polecat
   <rig>/           - Broadcast to a rig
 
+Message types:
+  task          - Required processing
+  scavenge      - Optional first-come work
+  notification  - Informational (default)
+  reply         - Response to message
+
+Priority levels:
+  low, normal (default), high, urgent
+
 Examples:
   gt mail send gastown/Toast -s "Status check" -m "How's that bug fix going?"
   gt mail send mayor/ -s "Work complete" -m "Finished gt-abc"
-  gt mail send gastown/ -s "All hands" -m "Swarm starting" --notify`,
+  gt mail send gastown/ -s "All hands" -m "Swarm starting" --notify
+  gt mail send gastown/Toast -s "Task" -m "Fix bug" --type task --priority high
+  gt mail send mayor/ -s "Re: Status" -m "Done" --reply-to msg-abc123`,
 	Args: cobra.ExactArgs(1),
 	RunE: runMailSend,
 }
@@ -108,11 +124,26 @@ Examples:
 	RunE: runMailCheck,
 }
 
+var mailThreadCmd = &cobra.Command{
+	Use:   "thread <thread-id>",
+	Short: "View a message thread",
+	Long: `View all messages in a conversation thread.
+
+Shows messages in chronological order (oldest first).
+
+Examples:
+  gt mail thread thread-abc123`,
+	Args: cobra.ExactArgs(1),
+	RunE: runMailThread,
+}
+
 func init() {
 	// Send flags
 	mailSendCmd.Flags().StringVarP(&mailSubject, "subject", "s", "", "Message subject (required)")
 	mailSendCmd.Flags().StringVarP(&mailBody, "message", "m", "", "Message body")
-	mailSendCmd.Flags().StringVar(&mailPriority, "priority", "normal", "Message priority (normal, high)")
+	mailSendCmd.Flags().StringVar(&mailPriority, "priority", "normal", "Message priority (low, normal, high, urgent)")
+	mailSendCmd.Flags().StringVar(&mailType, "type", "notification", "Message type (task, scavenge, notification, reply)")
+	mailSendCmd.Flags().StringVar(&mailReplyTo, "reply-to", "", "Message ID this is replying to")
 	mailSendCmd.Flags().BoolVarP(&mailNotify, "notify", "n", false, "Send tmux notification to recipient")
 	mailSendCmd.MarkFlagRequired("subject")
 
@@ -127,12 +158,16 @@ func init() {
 	mailCheckCmd.Flags().BoolVar(&mailCheckInject, "inject", false, "Output format for Claude Code hooks")
 	mailCheckCmd.Flags().BoolVar(&mailCheckJSON, "json", false, "Output as JSON")
 
+	// Thread flags
+	mailThreadCmd.Flags().BoolVar(&mailThreadJSON, "json", false, "Output as JSON")
+
 	// Add subcommands
 	mailCmd.AddCommand(mailSendCmd)
 	mailCmd.AddCommand(mailInboxCmd)
 	mailCmd.AddCommand(mailReadCmd)
 	mailCmd.AddCommand(mailDeleteCmd)
 	mailCmd.AddCommand(mailCheckCmd)
+	mailCmd.AddCommand(mailThreadCmd)
 
 	rootCmd.AddCommand(mailCmd)
 }
@@ -158,8 +193,34 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 	}
 
 	// Set priority
-	if mailPriority == "high" || mailNotify {
+	msg.Priority = mail.ParsePriority(mailPriority)
+	if mailNotify && msg.Priority == mail.PriorityNormal {
 		msg.Priority = mail.PriorityHigh
+	}
+
+	// Set message type
+	msg.Type = mail.ParseMessageType(mailType)
+
+	// Handle reply-to: auto-set type to reply and look up thread
+	if mailReplyTo != "" {
+		msg.ReplyTo = mailReplyTo
+		if msg.Type == mail.TypeNotification {
+			msg.Type = mail.TypeReply
+		}
+
+		// Look up original message to get thread ID
+		router := mail.NewRouter(workDir)
+		mailbox, err := router.GetMailbox(from)
+		if err == nil {
+			if original, err := mailbox.Get(mailReplyTo); err == nil {
+				msg.ThreadID = original.ThreadID
+			}
+		}
+	}
+
+	// Generate thread ID for new threads
+	if msg.ThreadID == "" {
+		msg.ThreadID = generateThreadID()
 	}
 
 	// Send via router
@@ -170,6 +231,9 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("%s Message sent to %s\n", style.Bold.Render("✓"), to)
 	fmt.Printf("  Subject: %s\n", mailSubject)
+	if msg.Type != mail.TypeNotification {
+		fmt.Printf("  Type: %s\n", msg.Type)
+	}
 
 	return nil
 }
@@ -229,12 +293,16 @@ func runMailInbox(cmd *cobra.Command, args []string) error {
 		if msg.Read {
 			readMarker = "○"
 		}
+		typeMarker := ""
+		if msg.Type != "" && msg.Type != mail.TypeNotification {
+			typeMarker = fmt.Sprintf(" [%s]", msg.Type)
+		}
 		priorityMarker := ""
-		if msg.Priority == mail.PriorityHigh {
+		if msg.Priority == mail.PriorityHigh || msg.Priority == mail.PriorityUrgent {
 			priorityMarker = " " + style.Bold.Render("!")
 		}
 
-		fmt.Printf("  %s %s%s\n", readMarker, msg.Subject, priorityMarker)
+		fmt.Printf("  %s %s%s%s\n", readMarker, msg.Subject, typeMarker, priorityMarker)
 		fmt.Printf("    %s from %s\n",
 			style.Dim.Render(msg.ID),
 			msg.From)
@@ -281,15 +349,29 @@ func runMailRead(cmd *cobra.Command, args []string) error {
 
 	// Human-readable output
 	priorityStr := ""
-	if msg.Priority == mail.PriorityHigh {
+	if msg.Priority == mail.PriorityUrgent {
+		priorityStr = " " + style.Bold.Render("[URGENT]")
+	} else if msg.Priority == mail.PriorityHigh {
 		priorityStr = " " + style.Bold.Render("[HIGH PRIORITY]")
 	}
 
-	fmt.Printf("%s %s%s\n\n", style.Bold.Render("Subject:"), msg.Subject, priorityStr)
+	typeStr := ""
+	if msg.Type != "" && msg.Type != mail.TypeNotification {
+		typeStr = fmt.Sprintf(" [%s]", msg.Type)
+	}
+
+	fmt.Printf("%s %s%s%s\n\n", style.Bold.Render("Subject:"), msg.Subject, typeStr, priorityStr)
 	fmt.Printf("From: %s\n", msg.From)
 	fmt.Printf("To: %s\n", msg.To)
 	fmt.Printf("Date: %s\n", msg.Timestamp.Format("2006-01-02 15:04:05"))
 	fmt.Printf("ID: %s\n", style.Dim.Render(msg.ID))
+
+	if msg.ThreadID != "" {
+		fmt.Printf("Thread: %s\n", style.Dim.Render(msg.ThreadID))
+	}
+	if msg.ReplyTo != "" {
+		fmt.Printf("Reply-To: %s\n", style.Dim.Render(msg.ReplyTo))
+	}
 
 	if msg.Body != "" {
 		fmt.Printf("\n%s\n", msg.Body)
@@ -466,4 +548,79 @@ func runMailCheck(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+func runMailThread(cmd *cobra.Command, args []string) error {
+	threadID := args[0]
+
+	// Find workspace
+	workDir, err := findBeadsWorkDir()
+	if err != nil {
+		return fmt.Errorf("not in a Gas Town workspace: %w", err)
+	}
+
+	// Determine which inbox
+	address := detectSender()
+
+	// Get mailbox and thread messages
+	router := mail.NewRouter(workDir)
+	mailbox, err := router.GetMailbox(address)
+	if err != nil {
+		return fmt.Errorf("getting mailbox: %w", err)
+	}
+
+	messages, err := mailbox.ListByThread(threadID)
+	if err != nil {
+		return fmt.Errorf("getting thread: %w", err)
+	}
+
+	// JSON output
+	if mailThreadJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(messages)
+	}
+
+	// Human-readable output
+	fmt.Printf("%s Thread: %s (%d messages)\n\n",
+		style.Bold.Render("🧵"), threadID, len(messages))
+
+	if len(messages) == 0 {
+		fmt.Printf("  %s\n", style.Dim.Render("(no messages in thread)"))
+		return nil
+	}
+
+	for i, msg := range messages {
+		typeMarker := ""
+		if msg.Type != "" && msg.Type != mail.TypeNotification {
+			typeMarker = fmt.Sprintf(" [%s]", msg.Type)
+		}
+		priorityMarker := ""
+		if msg.Priority == mail.PriorityHigh || msg.Priority == mail.PriorityUrgent {
+			priorityMarker = " " + style.Bold.Render("!")
+		}
+
+		if i > 0 {
+			fmt.Printf("  %s\n", style.Dim.Render("│"))
+		}
+		fmt.Printf("  %s %s%s%s\n", style.Bold.Render("●"), msg.Subject, typeMarker, priorityMarker)
+		fmt.Printf("    %s from %s to %s\n",
+			style.Dim.Render(msg.ID),
+			msg.From, msg.To)
+		fmt.Printf("    %s\n",
+			style.Dim.Render(msg.Timestamp.Format("2006-01-02 15:04")))
+
+		if msg.Body != "" {
+			fmt.Printf("    %s\n", msg.Body)
+		}
+	}
+
+	return nil
+}
+
+// generateThreadID creates a random thread ID for new message threads.
+func generateThreadID() string {
+	b := make([]byte, 6)
+	rand.Read(b)
+	return "thread-" + hex.EncodeToString(b)
 }

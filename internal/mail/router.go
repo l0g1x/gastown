@@ -36,9 +36,23 @@ func (r *Router) Send(msg *Message) error {
 		"-s", msg.Subject,
 	}
 
-	// Add importance flag for high priority
-	if msg.Priority == PriorityHigh {
-		args = append(args, "--importance", "high")
+	// Add priority flag
+	beadsPriority := PriorityToBeads(msg.Priority)
+	args = append(args, "--priority", fmt.Sprintf("%d", beadsPriority))
+
+	// Add message type if set
+	if msg.Type != "" && msg.Type != TypeNotification {
+		args = append(args, "--type", string(msg.Type))
+	}
+
+	// Add thread ID if set
+	if msg.ThreadID != "" {
+		args = append(args, "--thread-id", msg.ThreadID)
+	}
+
+	// Add reply-to if set
+	if msg.ReplyTo != "" {
+		args = append(args, "--reply-to", msg.ReplyTo)
 	}
 
 	cmd := exec.Command("bd", args...)
@@ -57,7 +71,7 @@ func (r *Router) Send(msg *Message) error {
 	}
 
 	// Optionally notify if recipient is a polecat with active session
-	if isPolecat(msg.To) && msg.Priority == PriorityHigh {
+	if isPolecat(msg.To) && (msg.Priority == PriorityHigh || msg.Priority == PriorityUrgent) {
 		r.notifyPolecat(msg)
 	}
 

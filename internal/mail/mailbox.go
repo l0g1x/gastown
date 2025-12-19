@@ -379,3 +379,71 @@ func (m *Mailbox) rewriteLegacy(messages []*Message) error {
 	// Atomic rename
 	return os.Rename(tmpPath, m.path)
 }
+
+// ListByThread returns all messages in a given thread.
+func (m *Mailbox) ListByThread(threadID string) ([]*Message, error) {
+	if m.legacy {
+		return m.listByThreadLegacy(threadID)
+	}
+	return m.listByThreadBeads(threadID)
+}
+
+func (m *Mailbox) listByThreadBeads(threadID string) ([]*Message, error) {
+	// bd message thread <thread-id> --json
+	cmd := exec.Command("bd", "message", "thread", threadID, "--json")
+	cmd.Dir = m.workDir
+	cmd.Env = append(cmd.Environ(), "BD_IDENTITY="+m.identity)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return nil, errors.New(errMsg)
+		}
+		return nil, err
+	}
+
+	var beadsMsgs []BeadsMessage
+	if err := json.Unmarshal(stdout.Bytes(), &beadsMsgs); err != nil {
+		if len(stdout.Bytes()) == 0 || string(stdout.Bytes()) == "null" {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var messages []*Message
+	for _, bm := range beadsMsgs {
+		messages = append(messages, bm.ToMessage())
+	}
+
+	// Sort by timestamp (oldest first for thread view)
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Timestamp.Before(messages[j].Timestamp)
+	})
+
+	return messages, nil
+}
+
+func (m *Mailbox) listByThreadLegacy(threadID string) ([]*Message, error) {
+	messages, err := m.List()
+	if err != nil {
+		return nil, err
+	}
+
+	var thread []*Message
+	for _, msg := range messages {
+		if msg.ThreadID == threadID {
+			thread = append(thread, msg)
+		}
+	}
+
+	// Sort by timestamp (oldest first for thread view)
+	sort.Slice(thread, func(i, j int) bool {
+		return thread[i].Timestamp.Before(thread[j].Timestamp)
+	})
+
+	return thread, nil
+}
