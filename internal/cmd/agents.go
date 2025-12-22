@@ -47,7 +47,7 @@ var AgentTypeIcons = map[AgentType]string{
 	AgentDeacon:   "🦉",
 	AgentWitness:  "👁",
 	AgentRefinery: "🏭",
-	AgentCrew:     "💻",
+	AgentCrew:     "👷",
 	AgentPolecat:  "😺",
 }
 
