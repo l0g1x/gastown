@@ -68,15 +68,19 @@ THING TYPES:
   epic      Epic ID for batch dispatch
 
 TARGET FORMATS:
-  gastown/Toast      → Polecat in rig
-  gastown/witness    → Rig's Witness
-  gastown/refinery   → Rig's Refinery
-  deacon/            → Global Deacon
+  gastown/Toast        → Polecat in rig (auto-starts session)
+  gastown/crew/dave    → Crew member (human-managed, no auto-start)
+  gastown/witness      → Rig's Witness
+  gastown/refinery     → Rig's Refinery
+  deacon/              → Global Deacon
+  mayor/               → Town Mayor (human-managed)
 
 Examples:
-  gt sling feature gastown/Toast           # Spawn feature, sling to Toast
+  gt sling feature gastown/Toast           # Spawn feature, sling to polecat
   gt sling gt-abc gastown/Nux -m bugfix    # Issue with workflow
-  gt sling patrol deacon/ --wisp           # Patrol wisp`,
+  gt sling patrol deacon/ --wisp           # Patrol wisp to deacon
+  gt sling version-bump beads/crew/dave    # Mol to crew member
+  gt sling epic-123 mayor/                 # Epic to mayor`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSling,
 }
@@ -145,12 +149,16 @@ func runSling(cmd *cobra.Command, args []string) error {
 	switch target.Kind {
 	case "polecat":
 		return slingToPolecat(townRoot, target, thing)
+	case "crew":
+		return slingToCrew(townRoot, target, thing)
 	case "deacon":
 		return slingToDeacon(townRoot, target, thing)
 	case "witness":
 		return slingToWitness(townRoot, target, thing)
 	case "refinery":
 		return slingToRefinery(townRoot, target, thing)
+	case "mayor":
+		return slingToMayor(townRoot, target, thing)
 	default:
 		return fmt.Errorf("unknown target kind: %s", target.Kind)
 	}
@@ -264,6 +272,12 @@ func parseAgentKind(role, name, rigName string) (*SlingTarget, error) {
 		}
 		return &SlingTarget{Kind: "polecat", Rig: rigName, Name: name}, nil
 
+	case "crew":
+		if name == "" {
+			return nil, fmt.Errorf("crew target requires a name (e.g., crew/dave)")
+		}
+		return &SlingTarget{Kind: "crew", Rig: rigName, Name: name}, nil
+
 	case "deacon":
 		return &SlingTarget{Kind: "deacon", Rig: rigName}, nil
 
@@ -272,6 +286,10 @@ func parseAgentKind(role, name, rigName string) (*SlingTarget, error) {
 
 	case "refinery":
 		return &SlingTarget{Kind: "refinery", Rig: rigName}, nil
+
+	case "mayor":
+		// Mayor is town-level, rig is ignored
+		return &SlingTarget{Kind: "mayor", Rig: ""}, nil
 
 	default:
 		// Might be a polecat name without "polecat/" prefix
@@ -283,7 +301,7 @@ func parseAgentKind(role, name, rigName string) (*SlingTarget, error) {
 // isAgentRole returns true if the string is a known agent role.
 func isAgentRole(s string) bool {
 	switch strings.ToLower(s) {
-	case "polecat", "polecats", "deacon", "witness", "refinery":
+	case "polecat", "polecats", "deacon", "witness", "refinery", "crew", "mayor":
 		return true
 	}
 	return false
@@ -565,20 +583,300 @@ func slingToDeacon(townRoot string, target *SlingTarget, thing *SlingThing) erro
 	return nil
 }
 
+// slingToCrew handles slinging work to a crew member.
+// Crew members are persistent, human-managed workers - no session start.
+func slingToCrew(townRoot string, target *SlingTarget, thing *SlingThing) error {
+	beadsPath := filepath.Join(townRoot, target.Rig)
+	crewAddress := fmt.Sprintf("%s/crew/%s", target.Rig, target.Name)
+
+	// Verify crew member exists
+	crewPath := filepath.Join(townRoot, target.Rig, "crew", target.Name)
+	if _, err := os.Stat(crewPath); os.IsNotExist(err) {
+		return fmt.Errorf("crew member '%s' not found at %s", target.Name, crewPath)
+	}
+
+	// Check for existing work on hook (unless --force)
+	if !slingForce {
+		if err := checkHookCollision(crewAddress, beadsPath); err != nil {
+			return err
+		}
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, true); err != nil {
+		fmt.Printf("%s beads sync: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	// Process the thing based on its kind
+	var issueID string
+	var moleculeCtx *MoleculeContext
+	var err error
+
+	switch thing.Kind {
+	case "proto":
+		issueID, moleculeCtx, err = spawnMoleculeFromProto(beadsPath, thing, crewAddress)
+		if err != nil {
+			return err
+		}
+	case "issue":
+		issueID = thing.ID
+		if thing.Proto != "" {
+			issueID, moleculeCtx, err = spawnMoleculeOnIssue(beadsPath, thing, crewAddress)
+			if err != nil {
+				return err
+			}
+		}
+	case "epic":
+		// Epics can be slung to crew for manual processing
+		issueID = thing.ID
+	}
+
+	// Pin to hook
+	if err := pinToHook(beadsPath, crewAddress, issueID, moleculeCtx); err != nil {
+		fmt.Printf("%s Could not pin to hook: %v\n", style.Dim.Render("Warning:"), err)
+	} else {
+		fmt.Printf("%s Pinned to crew hook\n", style.Bold.Render("✓"))
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, false); err != nil {
+		fmt.Printf("%s beads push: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	// Send work assignment mail (crew will see it on next session start)
+	router := mail.NewRouter(townRoot)
+	b := beads.New(beadsPath)
+	issue, _ := b.Show(issueID)
+	var beadsIssue *BeadsIssue
+	if issue != nil {
+		beadsIssue = &BeadsIssue{
+			ID:          issue.ID,
+			Title:       issue.Title,
+			Description: issue.Description,
+			Priority:    issue.Priority,
+			Type:        issue.Type,
+			Status:      issue.Status,
+		}
+	}
+
+	workMsg := buildWorkAssignmentMail(beadsIssue, "", crewAddress, moleculeCtx)
+	if err := router.Send(workMsg); err != nil {
+		fmt.Printf("%s Could not send mail: %v\n", style.Dim.Render("Warning:"), err)
+	} else {
+		fmt.Printf("%s Work assignment sent to %s\n", style.Bold.Render("✓"), crewAddress)
+	}
+
+	fmt.Printf("\n%s Crew member will see work on next session start\n",
+		style.Bold.Render("✓"))
+	fmt.Printf("  %s\n", style.Dim.Render("(Crew sessions are human-managed, not auto-started)"))
+
+	return nil
+}
+
 // slingToWitness handles slinging work to the witness.
 func slingToWitness(townRoot string, target *SlingTarget, thing *SlingThing) error {
-	// Similar to deacon - update hook and optionally signal
-	return fmt.Errorf("slinging to witness not yet implemented")
+	beadsPath := filepath.Join(townRoot, target.Rig)
+	witnessAddress := fmt.Sprintf("%s/witness", target.Rig)
+
+	if !thing.IsWisp {
+		fmt.Printf("%s Witness work should be ephemeral. Consider using --wisp\n",
+			style.Dim.Render("Note:"))
+	}
+
+	// Check for existing work on hook (unless --force)
+	if !slingForce {
+		if err := checkHookCollision(witnessAddress, beadsPath); err != nil {
+			return err
+		}
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, true); err != nil {
+		fmt.Printf("%s beads sync: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	// Process the thing
+	var issueID string
+	var moleculeCtx *MoleculeContext
+	var err error
+
+	switch thing.Kind {
+	case "proto":
+		issueID, moleculeCtx, err = spawnMoleculeFromProto(beadsPath, thing, witnessAddress)
+		if err != nil {
+			return err
+		}
+	case "issue":
+		issueID = thing.ID
+		if thing.Proto != "" {
+			issueID, moleculeCtx, err = spawnMoleculeOnIssue(beadsPath, thing, witnessAddress)
+			if err != nil {
+				return err
+			}
+		}
+	default:
+		return fmt.Errorf("witness accepts protos or issues, not %s", thing.Kind)
+	}
+
+	// Pin to witness hook
+	if err := pinToHook(beadsPath, witnessAddress, issueID, moleculeCtx); err != nil {
+		fmt.Printf("%s Could not pin to hook: %v\n", style.Dim.Render("Warning:"), err)
+	} else {
+		fmt.Printf("%s Pinned to witness hook\n", style.Bold.Render("✓"))
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, false); err != nil {
+		fmt.Printf("%s beads push: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	fmt.Printf("%s Witness will run %s on next patrol\n",
+		style.Bold.Render("✓"), thing.ID)
+
+	return nil
 }
 
 // slingToRefinery handles slinging work to the refinery.
 func slingToRefinery(townRoot string, target *SlingTarget, thing *SlingThing) error {
-	if thing.Kind != "epic" {
-		return fmt.Errorf("refinery accepts epics for batch processing, not %s", thing.Kind)
+	beadsPath := filepath.Join(townRoot, target.Rig)
+	refineryAddress := fmt.Sprintf("%s/refinery", target.Rig)
+
+	// Check for existing work on hook (unless --force)
+	if !slingForce {
+		if err := checkHookCollision(refineryAddress, beadsPath); err != nil {
+			return err
+		}
 	}
 
-	// Refinery batch processing not yet implemented
-	return fmt.Errorf("slinging epics to refinery not yet implemented")
+	// Sync beads
+	if err := syncBeads(beadsPath, true); err != nil {
+		fmt.Printf("%s beads sync: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	// Process the thing
+	var issueID string
+	var moleculeCtx *MoleculeContext
+	var err error
+
+	switch thing.Kind {
+	case "proto":
+		issueID, moleculeCtx, err = spawnMoleculeFromProto(beadsPath, thing, refineryAddress)
+		if err != nil {
+			return err
+		}
+	case "issue":
+		issueID = thing.ID
+		if thing.Proto != "" {
+			issueID, moleculeCtx, err = spawnMoleculeOnIssue(beadsPath, thing, refineryAddress)
+			if err != nil {
+				return err
+			}
+		}
+	case "epic":
+		// Epics go to refinery for batch dispatch to polecats
+		issueID = thing.ID
+	}
+
+	// Pin to refinery hook
+	if err := pinToHook(beadsPath, refineryAddress, issueID, moleculeCtx); err != nil {
+		fmt.Printf("%s Could not pin to hook: %v\n", style.Dim.Render("Warning:"), err)
+	} else {
+		fmt.Printf("%s Pinned to refinery hook\n", style.Bold.Render("✓"))
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, false); err != nil {
+		fmt.Printf("%s beads push: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	fmt.Printf("%s Refinery will process %s on next cycle\n",
+		style.Bold.Render("✓"), thing.ID)
+
+	return nil
+}
+
+// slingToMayor handles slinging work to the mayor.
+// Mayor is town-level, human-managed - no session start.
+func slingToMayor(townRoot string, target *SlingTarget, thing *SlingThing) error {
+	// Mayor uses town-level beads
+	beadsPath := townRoot
+	mayorAddress := "mayor/"
+
+	// Check for existing work on hook (unless --force)
+	if !slingForce {
+		if err := checkHookCollision(mayorAddress, beadsPath); err != nil {
+			return err
+		}
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, true); err != nil {
+		fmt.Printf("%s beads sync: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	// Process the thing
+	var issueID string
+	var moleculeCtx *MoleculeContext
+	var err error
+
+	switch thing.Kind {
+	case "proto":
+		issueID, moleculeCtx, err = spawnMoleculeFromProto(beadsPath, thing, mayorAddress)
+		if err != nil {
+			return err
+		}
+	case "issue":
+		issueID = thing.ID
+		if thing.Proto != "" {
+			issueID, moleculeCtx, err = spawnMoleculeOnIssue(beadsPath, thing, mayorAddress)
+			if err != nil {
+				return err
+			}
+		}
+	case "epic":
+		// Mayor can work epics directly
+		issueID = thing.ID
+	}
+
+	// Pin to mayor hook
+	if err := pinToHook(beadsPath, mayorAddress, issueID, moleculeCtx); err != nil {
+		fmt.Printf("%s Could not pin to hook: %v\n", style.Dim.Render("Warning:"), err)
+	} else {
+		fmt.Printf("%s Pinned to mayor hook\n", style.Bold.Render("✓"))
+	}
+
+	// Sync beads
+	if err := syncBeads(beadsPath, false); err != nil {
+		fmt.Printf("%s beads push: %v\n", style.Dim.Render("Warning:"), err)
+	}
+
+	// Send work assignment mail
+	router := mail.NewRouter(townRoot)
+	b := beads.New(beadsPath)
+	issue, _ := b.Show(issueID)
+	var beadsIssue *BeadsIssue
+	if issue != nil {
+		beadsIssue = &BeadsIssue{
+			ID:          issue.ID,
+			Title:       issue.Title,
+			Description: issue.Description,
+			Priority:    issue.Priority,
+			Type:        issue.Type,
+			Status:      issue.Status,
+		}
+	}
+
+	workMsg := buildWorkAssignmentMail(beadsIssue, "", mayorAddress, moleculeCtx)
+	if err := router.Send(workMsg); err != nil {
+		fmt.Printf("%s Could not send mail: %v\n", style.Dim.Render("Warning:"), err)
+	} else {
+		fmt.Printf("%s Work assignment sent to mayor\n", style.Bold.Render("✓"))
+	}
+
+	fmt.Printf("\n%s Mayor will see work on next session start\n",
+		style.Bold.Render("✓"))
+
+	return nil
 }
 
 // spawnMoleculeFromProto spawns a molecule from a proto template.
