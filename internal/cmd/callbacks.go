@@ -34,11 +34,9 @@ var (
 	// SLING_REQUEST: <bead-id> - request to sling work
 	patternSling = regexp.MustCompile(`^SLING_REQUEST:\s+(\S+)`)
 
-	// WITNESS_REPORT: <rig> - periodic health report from witness
-	patternWitnessReport = regexp.MustCompile(`^WITNESS_REPORT:\s+(\S+)`)
-
-	// REFINERY_REPORT: <rig> - periodic status from refinery
-	patternRefineryReport = regexp.MustCompile(`^REFINERY_REPORT:\s+(\S+)`)
+	// NOTE: WITNESS_REPORT and REFINERY_REPORT removed.
+	// Witnesses and Refineries handle their duties autonomously.
+	// They only escalate genuine problems, not routine status updates.
 )
 
 // CallbackType identifies the type of callback message.
@@ -51,9 +49,9 @@ const (
 	CallbackHelp           CallbackType = "help"
 	CallbackEscalation     CallbackType = "escalation"
 	CallbackSling          CallbackType = "sling"
-	CallbackWitnessReport  CallbackType = "witness_report"
-	CallbackRefineryReport CallbackType = "refinery_report"
 	CallbackUnknown        CallbackType = "unknown"
+	// NOTE: CallbackWitnessReport and CallbackRefineryReport removed.
+	// Routine status reports are no longer sent to Mayor.
 )
 
 // CallbackResult tracks the result of processing a callback.
@@ -97,8 +95,9 @@ its type:
   HELP:              - Route to human or handle if possible
   ESCALATION:        - Log and route to human
   SLING_REQUEST:     - Spawn polecat for the work
-  WITNESS_REPORT:    - Log health status
-  REFINERY_REPORT:   - Log queue status
+
+Note: Witnesses and Refineries handle routine operations autonomously.
+They only send escalations for genuine problems, not status reports.
 
 Unknown message types are logged but left unprocessed.`,
 	RunE: runCallbacksProcess,
@@ -237,14 +236,6 @@ func processCallback(townRoot string, msg *mail.Message, dryRun bool) CallbackRe
 		result.Action, result.Error = handleSling(townRoot, msg, dryRun)
 		result.Handled = result.Error == nil
 
-	case CallbackWitnessReport:
-		result.Action, result.Error = handleWitnessReport(townRoot, msg, dryRun)
-		result.Handled = result.Error == nil
-
-	case CallbackRefineryReport:
-		result.Action, result.Error = handleRefineryReport(townRoot, msg, dryRun)
-		result.Handled = result.Error == nil
-
 	default:
 		result.Action = "unknown message type, skipped"
 		result.Handled = false
@@ -276,10 +267,6 @@ func classifyCallback(subject string) CallbackType {
 		return CallbackEscalation
 	case patternSling.MatchString(subject):
 		return CallbackSling
-	case patternWitnessReport.MatchString(subject):
-		return CallbackWitnessReport
-	case patternRefineryReport.MatchString(subject):
-		return CallbackRefineryReport
 	default:
 		return CallbackUnknown
 	}
@@ -490,64 +477,6 @@ func handleSling(townRoot string, msg *mail.Message, dryRun bool) (string, error
 	// executing the sling command based on this request.
 	return fmt.Sprintf("logged sling request: %s to %s (execute with: gt sling %s %s)",
 		beadID, targetRig, beadID, targetRig), nil
-}
-
-// handleWitnessReport processes a WITNESS_REPORT from a rig's Witness.
-func handleWitnessReport(townRoot string, msg *mail.Message, dryRun bool) (string, error) {
-	matches := patternWitnessReport.FindStringSubmatch(msg.Subject)
-	rig := ""
-	if len(matches) > 1 {
-		rig = matches[1]
-	}
-
-	// Extract stats from body
-	var healthy, unhealthy, stuck int
-	for _, line := range strings.Split(msg.Body, "\n") {
-		line = strings.TrimSpace(line)
-		fmt.Sscanf(line, "Healthy: %d", &healthy)
-		fmt.Sscanf(line, "Unhealthy: %d", &unhealthy)
-		fmt.Sscanf(line, "Stuck: %d", &stuck)
-	}
-
-	if dryRun {
-		return fmt.Sprintf("would log witness report for %s (healthy=%d, unhealthy=%d)",
-			rig, healthy, unhealthy), nil
-	}
-
-	// Log the report
-	logCallback(townRoot, fmt.Sprintf("witness_report: rig %s: healthy=%d, unhealthy=%d, stuck=%d",
-		rig, healthy, unhealthy, stuck))
-
-	return fmt.Sprintf("logged witness report for %s", rig), nil
-}
-
-// handleRefineryReport processes a REFINERY_REPORT from a rig's Refinery.
-func handleRefineryReport(townRoot string, msg *mail.Message, dryRun bool) (string, error) {
-	matches := patternRefineryReport.FindStringSubmatch(msg.Subject)
-	rig := ""
-	if len(matches) > 1 {
-		rig = matches[1]
-	}
-
-	// Extract stats from body
-	var pending, processed, failed int
-	for _, line := range strings.Split(msg.Body, "\n") {
-		line = strings.TrimSpace(line)
-		fmt.Sscanf(line, "Pending: %d", &pending)
-		fmt.Sscanf(line, "Processed: %d", &processed)
-		fmt.Sscanf(line, "Failed: %d", &failed)
-	}
-
-	if dryRun {
-		return fmt.Sprintf("would log refinery report for %s (pending=%d, processed=%d)",
-			rig, pending, processed), nil
-	}
-
-	// Log the report
-	logCallback(townRoot, fmt.Sprintf("refinery_report: rig %s: pending=%d, processed=%d, failed=%d",
-		rig, pending, processed, failed))
-
-	return fmt.Sprintf("logged refinery report for %s", rig), nil
 }
 
 // logCallback logs a callback processing event to the town log.

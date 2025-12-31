@@ -111,11 +111,9 @@ Before killing ANY polecat session, verify:
    NOTE: Use `gt polecat nuke` instead of raw git commands. It knows the correct
    worktree parent repo (mayor/rig or .repo.git) and handles cleanup properly.
    The nuke will automatically block if cleanup_status indicates unpushed work.
-3. **Notify Mayor** (for tracking):
-   ```bash
-   gt mail send mayor/ -s "Polecat <name> processed" -m "Work: <issue>
-   MR sent to refinery for branch: <branch>"
-   ```
+
+**NOTE:** Do NOT notify Mayor about routine polecat processing. The Witness handles
+all routine lifecycle autonomously. Only escalate genuine problems to Mayor.
 
 ---
 
