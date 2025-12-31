@@ -283,6 +283,7 @@ func SessionPayload(sessionID, role, topic, cwd string) map[string]interface{} {
 	p := map[string]interface{}{
 		"session_id": sessionID,
 		"role":       role,
+		"actor_pid":  fmt.Sprintf("%s-%d", role, os.Getpid()),
 	}
 	if topic != "" {
 		p["topic"] = topic
