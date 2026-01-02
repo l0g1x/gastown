@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
+	"github.com/steveyegge/gastown/internal/crew"
 	"github.com/steveyegge/gastown/internal/deps"
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/polecat"
@@ -154,6 +155,25 @@ Examples:
 	RunE: runRigShutdown,
 }
 
+var rigStatusCmd = &cobra.Command{
+	Use:   "status <rig>",
+	Short: "Show detailed status for a specific rig",
+	Long: `Show detailed status for a specific rig including all workers.
+
+Displays:
+- Rig information (name, path, beads prefix)
+- Witness status (running/stopped, uptime)
+- Refinery status (running/stopped, uptime, queue size)
+- Polecats (name, state, assigned issue, session status)
+- Crew members (name, branch, session status, git status)
+
+Examples:
+  gt rig status gastown
+  gt rig status beads`,
+	Args: cobra.ExactArgs(1),
+	RunE: runRigStatus,
+}
+
 // Flags
 var (
 	rigAddPrefix       string
@@ -175,6 +195,7 @@ func init() {
 	rigCmd.AddCommand(rigRemoveCmd)
 	rigCmd.AddCommand(rigResetCmd)
 	rigCmd.AddCommand(rigShutdownCmd)
+	rigCmd.AddCommand(rigStatusCmd)
 
 	rigAddCmd.Flags().StringVar(&rigAddPrefix, "prefix", "", "Beads issue prefix (default: derived from name)")
 
@@ -767,5 +788,125 @@ func runRigReboot(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\n%s Rig %s rebooted successfully\n", style.Success.Render("✓"), rigName)
+	return nil
+}
+
+func runRigStatus(cmd *cobra.Command, args []string) error {
+	rigName := args[0]
+
+	// Get rig
+	townRoot, r, err := getRig(rigName)
+	if err != nil {
+		return err
+	}
+
+	t := tmux.NewTmux()
+
+	// Header
+	fmt.Printf("%s\n", style.Bold.Render(rigName))
+	fmt.Printf("  Path: %s\n", r.Path)
+	if r.Config != nil && r.Config.Prefix != "" {
+		fmt.Printf("  Beads prefix: %s-\n", r.Config.Prefix)
+	}
+	fmt.Println()
+
+	// Witness status
+	fmt.Printf("%s\n", style.Bold.Render("Witness"))
+	witnessSession := fmt.Sprintf("gt-%s-witness", rigName)
+	witnessRunning, _ := t.HasSession(witnessSession)
+	witMgr := witness.NewManager(r)
+	witStatus, _ := witMgr.Status()
+	if witnessRunning {
+		fmt.Printf("  %s running", style.Success.Render("●"))
+		if witStatus != nil && witStatus.StartedAt != nil {
+			fmt.Printf(" (uptime: %s)", formatDuration(time.Since(*witStatus.StartedAt)))
+		}
+		fmt.Printf("\n")
+	} else {
+		fmt.Printf("  %s stopped\n", style.Dim.Render("○"))
+	}
+	fmt.Println()
+
+	// Refinery status
+	fmt.Printf("%s\n", style.Bold.Render("Refinery"))
+	refinerySession := fmt.Sprintf("gt-%s-refinery", rigName)
+	refineryRunning, _ := t.HasSession(refinerySession)
+	refMgr := refinery.NewManager(r)
+	refStatus, _ := refMgr.Status()
+	if refineryRunning {
+		fmt.Printf("  %s running", style.Success.Render("●"))
+		if refStatus != nil && refStatus.StartedAt != nil {
+			fmt.Printf(" (uptime: %s)", formatDuration(time.Since(*refStatus.StartedAt)))
+		}
+		fmt.Printf("\n")
+		// Show queue size
+		queue, err := refMgr.Queue()
+		if err == nil && len(queue) > 0 {
+			fmt.Printf("  Queue: %d items\n", len(queue))
+		}
+	} else {
+		fmt.Printf("  %s stopped\n", style.Dim.Render("○"))
+	}
+	fmt.Println()
+
+	// Polecats
+	polecatGit := git.NewGit(r.Path)
+	polecatMgr := polecat.NewManager(r, polecatGit)
+	polecats, err := polecatMgr.List()
+	fmt.Printf("%s", style.Bold.Render("Polecats"))
+	if err != nil || len(polecats) == 0 {
+		fmt.Printf(" (none)\n")
+	} else {
+		fmt.Printf(" (%d)\n", len(polecats))
+		for _, p := range polecats {
+			sessionName := fmt.Sprintf("gt-%s-%s", rigName, p.Name)
+			hasSession, _ := t.HasSession(sessionName)
+
+			sessionIcon := style.Dim.Render("○")
+			if hasSession {
+				sessionIcon = style.Success.Render("●")
+			}
+
+			stateStr := string(p.State)
+			if p.Issue != "" {
+				stateStr = fmt.Sprintf("%s → %s", p.State, p.Issue)
+			}
+
+			fmt.Printf("  %s %s: %s\n", sessionIcon, p.Name, stateStr)
+		}
+	}
+	fmt.Println()
+
+	// Crew
+	crewMgr := crew.NewManager(r, git.NewGit(townRoot))
+	crewWorkers, err := crewMgr.List()
+	fmt.Printf("%s", style.Bold.Render("Crew"))
+	if err != nil || len(crewWorkers) == 0 {
+		fmt.Printf(" (none)\n")
+	} else {
+		fmt.Printf(" (%d)\n", len(crewWorkers))
+		for _, w := range crewWorkers {
+			sessionName := crewSessionName(rigName, w.Name)
+			hasSession, _ := t.HasSession(sessionName)
+
+			sessionIcon := style.Dim.Render("○")
+			if hasSession {
+				sessionIcon = style.Success.Render("●")
+			}
+
+			// Get git info
+			crewGit := git.NewGit(w.ClonePath)
+			branch, _ := crewGit.CurrentBranch()
+			gitStatus, _ := crewGit.Status()
+
+			gitInfo := ""
+			if gitStatus != nil && !gitStatus.Clean {
+				gitInfo = style.Warning.Render(" (dirty)")
+			}
+
+			fmt.Printf("  %s %s: %s%s\n", sessionIcon, w.Name, branch, gitInfo)
+		}
+	}
+
 	return nil
 }
