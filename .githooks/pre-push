@@ -8,6 +8,11 @@
 #   polecat/*         - Polecat working branches (Refinery merges these)
 
 while read local_ref local_sha remote_ref remote_sha; do
+  # Skip tags - they're allowed for releases
+  if [[ "$remote_ref" == refs/tags/* ]]; then
+    continue
+  fi
+
   branch="${remote_ref#refs/heads/}"
 
   case "$branch" in
