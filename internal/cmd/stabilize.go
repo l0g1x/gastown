@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	stabilizeNoRestart bool
-	stabilizeCrew      bool
-	stabilizeVerbose   bool
+	stabilizeNoRestart  bool
+	stabilizeCrew       bool
+	stabilizeVerbose    bool
+	stabilizeSkipDoctor bool
 )
 
 var stabilizeCmd = &cobra.Command{
@@ -43,6 +44,9 @@ The $GASTOWN_SRC environment variable takes precedence if set.`,
   # Testing a fix (don't restart daemon)
   make install && gt stabilize --no-restart
 
+  # Quick update (skip doctor)
+  make install && gt stabilize --skip-doctor
+
   # Full stabilization with crew assistance
   gt stabilize --crew
 
@@ -54,6 +58,8 @@ The $GASTOWN_SRC environment variable takes precedence if set.`,
 func init() {
 	stabilizeCmd.Flags().BoolVar(&stabilizeNoRestart, "no-restart", false,
 		"Don't restart daemon (use when testing against current broken state)")
+	stabilizeCmd.Flags().BoolVar(&stabilizeSkipDoctor, "skip-doctor", false,
+		"Skip running gt doctor --fix")
 	stabilizeCmd.Flags().BoolVar(&stabilizeCrew, "crew", false,
 		"Spawn crew agent to resolve issues doctor can't auto-fix")
 	stabilizeCmd.Flags().BoolVarP(&stabilizeVerbose, "verbose", "v", false,
@@ -114,7 +120,13 @@ func runStabilize(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 5. Run doctor --fix
+	// 5. Run doctor --fix (unless --skip-doctor)
+	if stabilizeSkipDoctor {
+		fmt.Printf("%s Skipping doctor (--skip-doctor)\n", style.Info.Render("ℹ"))
+		fmt.Printf("\n%s Stabilization complete\n", style.Success.Render("✓"))
+		return nil
+	}
+
 	fmt.Println("\nRunning gt doctor --fix...")
 	issues, err := runDoctorFixForStabilize(stabilizeVerbose)
 	if err != nil {
