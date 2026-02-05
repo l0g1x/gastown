@@ -47,6 +47,14 @@ Flags:
 	RunE: runRestart,
 }
 
+// RestartOptions configures the behavior of runRestartWithOptions.
+type RestartOptions struct {
+	Quiet bool // Only show errors
+	Wait  bool // Wait for agents to finish work before stopping
+	Force bool // Force immediate shutdown without graceful stop
+	Infra bool // Only restart infrastructure, leave polecats/crew running
+}
+
 var (
 	restartQuiet bool
 	restartWait  bool
@@ -62,26 +70,40 @@ func init() {
 	rootCmd.AddCommand(restartCmd)
 }
 
+// restartOptionsFromFlags creates RestartOptions from the package-level flag variables.
+func restartOptionsFromFlags() RestartOptions {
+	return RestartOptions{
+		Quiet: restartQuiet,
+		Wait:  restartWait,
+		Force: restartForce,
+		Infra: restartInfra,
+	}
+}
+
 func runRestart(cmd *cobra.Command, args []string) error {
+	return runRestartWithOptions(restartOptionsFromFlags())
+}
+
+func runRestartWithOptions(opts RestartOptions) error {
 	// --wait and --force are mutually exclusive
-	if restartWait && restartForce {
+	if opts.Wait && opts.Force {
 		return fmt.Errorf("--wait and --force are mutually exclusive")
 	}
 
-	if !restartQuiet {
+	if !opts.Quiet {
 		fmt.Printf("%s Restarting Gas Town...\n", style.Info.Render("ℹ"))
 		fmt.Println()
 	}
 
 	// Phase 0: If --wait, wait for agents to finish work
-	if restartWait {
-		if !restartQuiet {
+	if opts.Wait {
+		if !opts.Quiet {
 			fmt.Println("Waiting for agents to finish work...")
 		}
-		if err := waitForAgentsToFinish(restartQuiet); err != nil {
+		if err := waitForAgentsToFinish(opts.Quiet); err != nil {
 			return fmt.Errorf("wait failed: %w", err)
 		}
-		if !restartQuiet {
+		if !opts.Quiet {
 			fmt.Println()
 		}
 	}
@@ -90,16 +112,16 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	// By default, stop everything (including polecats) for a clean restart
 	// Use --infra to only stop infrastructure
 	downOpts := DownOptions{
-		Quiet:    restartQuiet,
-		Polecats: !restartInfra, // Stop polecats unless --infra
-		Force:    restartForce,
+		Quiet:    opts.Quiet,
+		Polecats: !opts.Infra, // Stop polecats unless --infra
+		Force:    opts.Force,
 		All:      false,
 		Nuke:     false,
 		DryRun:   false,
 	}
 
-	if !restartQuiet {
-		if restartInfra {
+	if !opts.Quiet {
+		if opts.Infra {
 			fmt.Println("Stopping infrastructure...")
 		} else {
 			fmt.Println("Stopping all services...")
@@ -108,7 +130,7 @@ func runRestart(cmd *cobra.Command, args []string) error {
 
 	if err := runDownWithOptions(downOpts); err != nil {
 		// Continue with startup even if some services failed to stop
-		if !restartQuiet {
+		if !opts.Quiet {
 			fmt.Printf("%s Some services failed to stop, continuing with startup...\n", style.Warning.Render("⚠"))
 		}
 	}
@@ -119,12 +141,12 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	// By default, restore everything (including polecats with work)
 	// Use --infra to only start infrastructure
 	upOpts := UpOptions{
-		Quiet:   restartQuiet,
-		Restore: !restartInfra, // Restore polecats/crew unless --infra
+		Quiet:   opts.Quiet,
+		Restore: !opts.Infra, // Restore polecats/crew unless --infra
 	}
 
-	if !restartQuiet {
-		if restartInfra {
+	if !opts.Quiet {
+		if opts.Infra {
 			fmt.Println("Starting infrastructure...")
 		} else {
 			fmt.Println("Starting all services...")

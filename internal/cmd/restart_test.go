@@ -83,6 +83,102 @@ func TestRestartCmd_GroupID(t *testing.T) {
 	}
 }
 
+func TestRestartOptions_FromFlags(t *testing.T) {
+	// Save original values
+	savedQuiet := restartQuiet
+	savedWait := restartWait
+	savedForce := restartForce
+	savedInfra := restartInfra
+
+	// Restore after test
+	defer func() {
+		restartQuiet = savedQuiet
+		restartWait = savedWait
+		restartForce = savedForce
+		restartInfra = savedInfra
+	}()
+
+	// Set test values
+	restartQuiet = true
+	restartWait = true
+	restartForce = false
+	restartInfra = true
+
+	opts := restartOptionsFromFlags()
+
+	if opts.Quiet != true {
+		t.Error("Quiet should be true")
+	}
+	if opts.Wait != true {
+		t.Error("Wait should be true")
+	}
+	if opts.Force != false {
+		t.Error("Force should be false")
+	}
+	if opts.Infra != true {
+		t.Error("Infra should be true")
+	}
+}
+
+func TestRestartOptions_ZeroValue(t *testing.T) {
+	// Test that zero-value RestartOptions has sensible defaults
+	opts := RestartOptions{}
+
+	if opts.Quiet != false {
+		t.Error("zero-value Quiet should be false")
+	}
+	if opts.Wait != false {
+		t.Error("zero-value Wait should be false")
+	}
+	if opts.Force != false {
+		t.Error("zero-value Force should be false")
+	}
+	if opts.Infra != false {
+		t.Error("zero-value Infra should be false")
+	}
+}
+
+func TestRestartOptions_DefaultStopsPolecats(t *testing.T) {
+	// Default restart (Infra=false) should stop polecats
+	opts := RestartOptions{Infra: false}
+
+	// Verify this translates to DownOptions with Polecats=true
+	shouldStopPolecats := !opts.Infra
+	if !shouldStopPolecats {
+		t.Error("default restart should stop polecats")
+	}
+}
+
+func TestRestartOptions_InfraSkipsPolecats(t *testing.T) {
+	// --infra restart should NOT stop polecats
+	opts := RestartOptions{Infra: true}
+
+	shouldStopPolecats := !opts.Infra
+	if shouldStopPolecats {
+		t.Error("--infra restart should NOT stop polecats")
+	}
+}
+
+func TestRestartOptions_DefaultRestoresPolecats(t *testing.T) {
+	// Default restart (Infra=false) should restore polecats
+	opts := RestartOptions{Infra: false}
+
+	shouldRestore := !opts.Infra
+	if !shouldRestore {
+		t.Error("default restart should restore polecats")
+	}
+}
+
+func TestRestartOptions_InfraSkipsRestore(t *testing.T) {
+	// --infra restart should NOT restore polecats
+	opts := RestartOptions{Infra: true}
+
+	shouldRestore := !opts.Infra
+	if shouldRestore {
+		t.Error("--infra restart should NOT restore polecats")
+	}
+}
+
 func TestDownOptions_FromFlags(t *testing.T) {
 	// Save original values
 	savedQuiet := downQuiet
@@ -190,63 +286,5 @@ func TestUpCmd_NoRestartFlag(t *testing.T) {
 
 	if flags.Lookup("restart") != nil {
 		t.Error("--restart flag should not exist on gt up (use gt restart instead)")
-	}
-}
-
-func TestRestartDownOptions_DefaultStopsPolecats(t *testing.T) {
-	// When --infra is false (default), restart should stop polecats
-	// This tests the logic in runRestart without actually running it
-
-	// Simulate default flags
-	restartInfra = false
-
-	// The down options should have Polecats: true (stop polecats)
-	downOpts := DownOptions{
-		Polecats: !restartInfra, // This is the logic from runRestart
-	}
-
-	if !downOpts.Polecats {
-		t.Error("default restart should stop polecats (Polecats should be true)")
-	}
-}
-
-func TestRestartDownOptions_InfraOnlySkipsPolecats(t *testing.T) {
-	// When --infra is true, restart should NOT stop polecats
-	restartInfra = true
-	defer func() { restartInfra = false }()
-
-	downOpts := DownOptions{
-		Polecats: !restartInfra,
-	}
-
-	if downOpts.Polecats {
-		t.Error("--infra restart should NOT stop polecats (Polecats should be false)")
-	}
-}
-
-func TestRestartUpOptions_DefaultRestoresPolecats(t *testing.T) {
-	// When --infra is false (default), restart should restore polecats
-	restartInfra = false
-
-	upOpts := UpOptions{
-		Restore: !restartInfra, // This is the logic from runRestart
-	}
-
-	if !upOpts.Restore {
-		t.Error("default restart should restore polecats (Restore should be true)")
-	}
-}
-
-func TestRestartUpOptions_InfraOnlySkipsRestore(t *testing.T) {
-	// When --infra is true, restart should NOT restore polecats
-	restartInfra = true
-	defer func() { restartInfra = false }()
-
-	upOpts := UpOptions{
-		Restore: !restartInfra,
-	}
-
-	if upOpts.Restore {
-		t.Error("--infra restart should NOT restore polecats (Restore should be false)")
 	}
 }
