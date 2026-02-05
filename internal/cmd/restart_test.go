@@ -25,8 +25,8 @@ func TestRestartCmd_Flags(t *testing.T) {
 	if flags.Lookup("wait") == nil {
 		t.Error("--wait flag not registered")
 	}
-	if flags.Lookup("force") == nil {
-		t.Error("--force flag not registered")
+	if flags.Lookup("now") == nil {
+		t.Error("--now flag not registered")
 	}
 	if flags.Lookup("infra") == nil {
 		t.Error("--infra flag not registered")
@@ -43,8 +43,8 @@ func TestRestartCmd_ShortFlags(t *testing.T) {
 	if flags.ShorthandLookup("w") == nil {
 		t.Error("-w short flag not registered")
 	}
-	if flags.ShorthandLookup("f") == nil {
-		t.Error("-f short flag not registered")
+	if flags.ShorthandLookup("n") == nil {
+		t.Error("-n short flag not registered")
 	}
 }
 
@@ -68,8 +68,8 @@ func TestRestartCmd_FlagDefaults(t *testing.T) {
 	if restartWait != false {
 		t.Error("restartWait should default to false")
 	}
-	if restartForce != false {
-		t.Error("restartForce should default to false")
+	if restartNow != false {
+		t.Error("restartNow should default to false")
 	}
 	if restartInfra != false {
 		t.Error("restartInfra should default to false")
@@ -87,21 +87,21 @@ func TestRestartOptions_FromFlags(t *testing.T) {
 	// Save original values
 	savedQuiet := restartQuiet
 	savedWait := restartWait
-	savedForce := restartForce
+	savedNow := restartNow
 	savedInfra := restartInfra
 
 	// Restore after test
 	defer func() {
 		restartQuiet = savedQuiet
 		restartWait = savedWait
-		restartForce = savedForce
+		restartNow = savedNow
 		restartInfra = savedInfra
 	}()
 
 	// Set test values
 	restartQuiet = true
 	restartWait = true
-	restartForce = false
+	restartNow = false
 	restartInfra = true
 
 	opts := restartOptionsFromFlags()
@@ -112,8 +112,8 @@ func TestRestartOptions_FromFlags(t *testing.T) {
 	if opts.Wait != true {
 		t.Error("Wait should be true")
 	}
-	if opts.Force != false {
-		t.Error("Force should be false")
+	if opts.Now != false {
+		t.Error("Now should be false")
 	}
 	if opts.Infra != true {
 		t.Error("Infra should be true")
@@ -130,8 +130,8 @@ func TestRestartOptions_ZeroValue(t *testing.T) {
 	if opts.Wait != false {
 		t.Error("zero-value Wait should be false")
 	}
-	if opts.Force != false {
-		t.Error("zero-value Force should be false")
+	if opts.Now != false {
+		t.Error("zero-value Now should be false")
 	}
 	if opts.Infra != false {
 		t.Error("zero-value Infra should be false")

@@ -34,7 +34,7 @@ Flags:
            Blocks until all polecats reach a checkpoint or complete.
            Use this for graceful restarts during active work.
 
-  --force  Force immediate shutdown without graceful stop.
+  --now    Immediate shutdown without graceful stop.
            Sends SIGKILL instead of SIGTERM. Use when agents are
            stuck or unresponsive.
 
@@ -42,7 +42,7 @@ Flags:
            witnesses, refineries). Leave polecats and crew running.`,
 	Example: `  gt restart           # Stop all, restart all (default)
   gt restart --wait    # Wait for work to finish, then restart
-  gt restart --force   # Force kill unresponsive agents
+  gt restart --now     # Immediate shutdown for stuck agents
   gt restart --infra   # Only restart infrastructure`,
 	RunE: runRestart,
 }
@@ -51,21 +51,21 @@ Flags:
 type RestartOptions struct {
 	Quiet bool // Only show errors
 	Wait  bool // Wait for agents to finish work before stopping
-	Force bool // Force immediate shutdown without graceful stop
+	Now   bool // Immediate shutdown without graceful stop
 	Infra bool // Only restart infrastructure, leave polecats/crew running
 }
 
 var (
 	restartQuiet bool
 	restartWait  bool
-	restartForce bool
+	restartNow   bool
 	restartInfra bool
 )
 
 func init() {
 	restartCmd.Flags().BoolVarP(&restartQuiet, "quiet", "q", false, "Only show errors")
 	restartCmd.Flags().BoolVarP(&restartWait, "wait", "w", false, "Wait for agents to finish work before stopping")
-	restartCmd.Flags().BoolVarP(&restartForce, "force", "f", false, "Force immediate shutdown without graceful stop")
+	restartCmd.Flags().BoolVarP(&restartNow, "now", "n", false, "Immediate shutdown without graceful stop")
 	restartCmd.Flags().BoolVar(&restartInfra, "infra", false, "Only restart infrastructure, leave polecats/crew running")
 	rootCmd.AddCommand(restartCmd)
 }
@@ -75,7 +75,7 @@ func restartOptionsFromFlags() RestartOptions {
 	return RestartOptions{
 		Quiet: restartQuiet,
 		Wait:  restartWait,
-		Force: restartForce,
+		Now:   restartNow,
 		Infra: restartInfra,
 	}
 }
@@ -85,9 +85,9 @@ func runRestart(cmd *cobra.Command, args []string) error {
 }
 
 func runRestartWithOptions(opts RestartOptions) error {
-	// --wait and --force are mutually exclusive
-	if opts.Wait && opts.Force {
-		return fmt.Errorf("--wait and --force are mutually exclusive")
+	// --wait and --now are mutually exclusive
+	if opts.Wait && opts.Now {
+		return fmt.Errorf("--wait and --now are mutually exclusive")
 	}
 
 	if !opts.Quiet {
@@ -114,7 +114,7 @@ func runRestartWithOptions(opts RestartOptions) error {
 	downOpts := DownOptions{
 		Quiet:    opts.Quiet,
 		Polecats: !opts.Infra, // Stop polecats unless --infra
-		Force:    opts.Force,
+		Force:    opts.Now,    // --now maps to force shutdown
 		All:      false,
 		Nuke:     false,
 		DryRun:   false,
