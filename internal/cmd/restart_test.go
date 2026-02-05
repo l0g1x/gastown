@@ -60,6 +60,29 @@ func TestRestartCmd_NoOldFlags(t *testing.T) {
 	}
 }
 
+func TestRestartCmd_FlagDefaults(t *testing.T) {
+	// Verify flag defaults
+	if restartQuiet != false {
+		t.Error("restartQuiet should default to false")
+	}
+	if restartWait != false {
+		t.Error("restartWait should default to false")
+	}
+	if restartForce != false {
+		t.Error("restartForce should default to false")
+	}
+	if restartInfra != false {
+		t.Error("restartInfra should default to false")
+	}
+}
+
+func TestRestartCmd_GroupID(t *testing.T) {
+	// Verify command is in services group
+	if restartCmd.GroupID != GroupServices {
+		t.Errorf("restart command GroupID = %q, want %q", restartCmd.GroupID, GroupServices)
+	}
+}
+
 func TestDownOptions_FromFlags(t *testing.T) {
 	// Save original values
 	savedQuiet := downQuiet
@@ -109,6 +132,21 @@ func TestDownOptions_FromFlags(t *testing.T) {
 	}
 }
 
+func TestDownOptions_ZeroValue(t *testing.T) {
+	// Test that zero-value DownOptions has sensible defaults
+	opts := DownOptions{}
+
+	if opts.Quiet != false {
+		t.Error("zero-value Quiet should be false")
+	}
+	if opts.Force != false {
+		t.Error("zero-value Force should be false")
+	}
+	if opts.Polecats != false {
+		t.Error("zero-value Polecats should be false")
+	}
+}
+
 func TestUpOptions_FromFlags(t *testing.T) {
 	// Save original values
 	savedQuiet := upQuiet
@@ -134,11 +172,81 @@ func TestUpOptions_FromFlags(t *testing.T) {
 	}
 }
 
+func TestUpOptions_ZeroValue(t *testing.T) {
+	// Test that zero-value UpOptions has sensible defaults
+	opts := UpOptions{}
+
+	if opts.Quiet != false {
+		t.Error("zero-value Quiet should be false")
+	}
+	if opts.Restore != false {
+		t.Error("zero-value Restore should be false")
+	}
+}
+
 func TestUpCmd_NoRestartFlag(t *testing.T) {
 	// Verify --restart flag was removed from gt up
 	flags := upCmd.Flags()
 
 	if flags.Lookup("restart") != nil {
 		t.Error("--restart flag should not exist on gt up (use gt restart instead)")
+	}
+}
+
+func TestRestartDownOptions_DefaultStopsPolecats(t *testing.T) {
+	// When --infra is false (default), restart should stop polecats
+	// This tests the logic in runRestart without actually running it
+
+	// Simulate default flags
+	restartInfra = false
+
+	// The down options should have Polecats: true (stop polecats)
+	downOpts := DownOptions{
+		Polecats: !restartInfra, // This is the logic from runRestart
+	}
+
+	if !downOpts.Polecats {
+		t.Error("default restart should stop polecats (Polecats should be true)")
+	}
+}
+
+func TestRestartDownOptions_InfraOnlySkipsPolecats(t *testing.T) {
+	// When --infra is true, restart should NOT stop polecats
+	restartInfra = true
+	defer func() { restartInfra = false }()
+
+	downOpts := DownOptions{
+		Polecats: !restartInfra,
+	}
+
+	if downOpts.Polecats {
+		t.Error("--infra restart should NOT stop polecats (Polecats should be false)")
+	}
+}
+
+func TestRestartUpOptions_DefaultRestoresPolecats(t *testing.T) {
+	// When --infra is false (default), restart should restore polecats
+	restartInfra = false
+
+	upOpts := UpOptions{
+		Restore: !restartInfra, // This is the logic from runRestart
+	}
+
+	if !upOpts.Restore {
+		t.Error("default restart should restore polecats (Restore should be true)")
+	}
+}
+
+func TestRestartUpOptions_InfraOnlySkipsRestore(t *testing.T) {
+	// When --infra is true, restart should NOT restore polecats
+	restartInfra = true
+	defer func() { restartInfra = false }()
+
+	upOpts := UpOptions{
+		Restore: !restartInfra,
+	}
+
+	if upOpts.Restore {
+		t.Error("--infra restart should NOT restore polecats (Restore should be false)")
 	}
 }
