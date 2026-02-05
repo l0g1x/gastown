@@ -15,43 +15,49 @@ func TestRestartCmd_Registered(t *testing.T) {
 	}
 }
 
+func TestRestartCmd_GroupID(t *testing.T) {
+	if restartCmd.GroupID != GroupServices {
+		t.Errorf("restart command GroupID = %q, want %q", restartCmd.GroupID, GroupServices)
+	}
+}
+
 func TestRestartCmd_Flags(t *testing.T) {
-	// Verify flags are registered
 	flags := restartCmd.Flags()
 
 	if flags.Lookup("quiet") == nil {
 		t.Error("--quiet flag not registered")
 	}
-	if flags.Lookup("wait") == nil {
-		t.Error("--wait flag not registered")
-	}
-	if flags.Lookup("now") == nil {
-		t.Error("--now flag not registered")
-	}
-	if flags.Lookup("infra") == nil {
-		t.Error("--infra flag not registered")
+	if flags.Lookup("strategy") == nil {
+		t.Error("--strategy flag not registered")
 	}
 }
 
 func TestRestartCmd_ShortFlags(t *testing.T) {
-	// Verify short flags
 	flags := restartCmd.Flags()
 
 	if flags.ShorthandLookup("q") == nil {
 		t.Error("-q short flag not registered")
 	}
-	if flags.ShorthandLookup("w") == nil {
-		t.Error("-w short flag not registered")
-	}
-	if flags.ShorthandLookup("n") == nil {
-		t.Error("-n short flag not registered")
+	if flags.ShorthandLookup("s") == nil {
+		t.Error("-s short flag not registered")
 	}
 }
 
 func TestRestartCmd_NoOldFlags(t *testing.T) {
-	// Verify old flags are removed
 	flags := restartCmd.Flags()
 
+	if flags.Lookup("wait") != nil {
+		t.Error("--wait flag should be removed (use --strategy drain)")
+	}
+	if flags.Lookup("now") != nil {
+		t.Error("--now flag should be removed (use --strategy immediate)")
+	}
+	if flags.Lookup("infra") != nil {
+		t.Error("--infra flag should be removed (use --strategy clean)")
+	}
+	if flags.Lookup("force") != nil {
+		t.Error("--force flag should be removed (use --strategy immediate)")
+	}
 	if flags.Lookup("restore") != nil {
 		t.Error("--restore flag should be removed (default behavior now)")
 	}
@@ -61,126 +67,135 @@ func TestRestartCmd_NoOldFlags(t *testing.T) {
 }
 
 func TestRestartCmd_FlagDefaults(t *testing.T) {
-	// Verify flag defaults
 	if restartQuiet != false {
 		t.Error("restartQuiet should default to false")
 	}
-	if restartWait != false {
-		t.Error("restartWait should default to false")
-	}
-	if restartNow != false {
-		t.Error("restartNow should default to false")
-	}
-	if restartInfra != false {
-		t.Error("restartInfra should default to false")
-	}
-}
-
-func TestRestartCmd_GroupID(t *testing.T) {
-	// Verify command is in services group
-	if restartCmd.GroupID != GroupServices {
-		t.Errorf("restart command GroupID = %q, want %q", restartCmd.GroupID, GroupServices)
+	if restartStrategy != StrategyGraceful {
+		t.Errorf("restartStrategy should default to %q, got %q", StrategyGraceful, restartStrategy)
 	}
 }
 
 func TestRestartOptions_FromFlags(t *testing.T) {
-	// Save original values
 	savedQuiet := restartQuiet
-	savedWait := restartWait
-	savedNow := restartNow
-	savedInfra := restartInfra
-
-	// Restore after test
+	savedStrategy := restartStrategy
 	defer func() {
 		restartQuiet = savedQuiet
-		restartWait = savedWait
-		restartNow = savedNow
-		restartInfra = savedInfra
+		restartStrategy = savedStrategy
 	}()
 
-	// Set test values
 	restartQuiet = true
-	restartWait = true
-	restartNow = false
-	restartInfra = true
+	restartStrategy = StrategyDrain
 
 	opts := restartOptionsFromFlags()
 
 	if opts.Quiet != true {
 		t.Error("Quiet should be true")
 	}
-	if opts.Wait != true {
-		t.Error("Wait should be true")
-	}
-	if opts.Now != false {
-		t.Error("Now should be false")
-	}
-	if opts.Infra != true {
-		t.Error("Infra should be true")
+	if opts.Strategy != StrategyDrain {
+		t.Errorf("Strategy should be %q, got %q", StrategyDrain, opts.Strategy)
 	}
 }
 
 func TestRestartOptions_ZeroValue(t *testing.T) {
-	// Test that zero-value RestartOptions has sensible defaults
 	opts := RestartOptions{}
 
 	if opts.Quiet != false {
 		t.Error("zero-value Quiet should be false")
 	}
-	if opts.Wait != false {
-		t.Error("zero-value Wait should be false")
-	}
-	if opts.Now != false {
-		t.Error("zero-value Now should be false")
-	}
-	if opts.Infra != false {
-		t.Error("zero-value Infra should be false")
+	if opts.Strategy != "" {
+		t.Errorf("zero-value Strategy should be empty, got %q", opts.Strategy)
 	}
 }
 
-func TestRestartOptions_DefaultStopsPolecats(t *testing.T) {
-	// Default restart (Infra=false) should stop polecats
-	opts := RestartOptions{Infra: false}
+func TestIsValidRestartStrategy(t *testing.T) {
+	valid := []string{"graceful", "drain", "immediate", "clean"}
+	for _, s := range valid {
+		if !isValidRestartStrategy(s) {
+			t.Errorf("strategy %q should be valid", s)
+		}
+	}
 
-	// Verify this translates to DownOptions with Polecats=true
-	shouldStopPolecats := !opts.Infra
-	if !shouldStopPolecats {
-		t.Error("default restart should stop polecats")
+	invalid := []string{"", "fast", "slow", "GRACEFUL", "Drain"}
+	for _, s := range invalid {
+		if isValidRestartStrategy(s) {
+			t.Errorf("strategy %q should be invalid", s)
+		}
 	}
 }
 
-func TestRestartOptions_InfraSkipsPolecats(t *testing.T) {
-	// --infra restart should NOT stop polecats
-	opts := RestartOptions{Infra: true}
-
-	shouldStopPolecats := !opts.Infra
-	if shouldStopPolecats {
-		t.Error("--infra restart should NOT stop polecats")
+func TestRestartStrategyConstants(t *testing.T) {
+	if StrategyGraceful != "graceful" {
+		t.Errorf("StrategyGraceful = %q, want %q", StrategyGraceful, "graceful")
+	}
+	if StrategyDrain != "drain" {
+		t.Errorf("StrategyDrain = %q, want %q", StrategyDrain, "drain")
+	}
+	if StrategyImmediate != "immediate" {
+		t.Errorf("StrategyImmediate = %q, want %q", StrategyImmediate, "immediate")
+	}
+	if StrategyClean != "clean" {
+		t.Errorf("StrategyClean = %q, want %q", StrategyClean, "clean")
 	}
 }
 
-func TestRestartOptions_DefaultRestoresPolecats(t *testing.T) {
-	// Default restart (Infra=false) should restore polecats
-	opts := RestartOptions{Infra: false}
+func TestValidRestartStrategies_ContainsAll(t *testing.T) {
+	expected := map[string]bool{
+		StrategyGraceful:  false,
+		StrategyDrain:     false,
+		StrategyImmediate: false,
+		StrategyClean:     false,
+	}
 
-	shouldRestore := !opts.Infra
-	if !shouldRestore {
-		t.Error("default restart should restore polecats")
+	for _, s := range validRestartStrategies {
+		if _, ok := expected[s]; !ok {
+			t.Errorf("unexpected strategy %q in validRestartStrategies", s)
+		}
+		expected[s] = true
+	}
+
+	for s, found := range expected {
+		if !found {
+			t.Errorf("strategy %q missing from validRestartStrategies", s)
+		}
 	}
 }
 
-func TestRestartOptions_InfraSkipsRestore(t *testing.T) {
-	// --infra restart should NOT restore polecats
-	opts := RestartOptions{Infra: true}
+func TestRunRestartWithOptions_InvalidStrategy(t *testing.T) {
+	err := runRestartWithOptions(RestartOptions{Strategy: "bogus", Quiet: true})
+	if err == nil {
+		t.Fatal("expected error for invalid strategy")
+	}
+	if got := err.Error(); got == "" {
+		t.Error("error message should not be empty")
+	}
+}
 
-	shouldRestore := !opts.Infra
-	if shouldRestore {
-		t.Error("--infra restart should NOT restore polecats")
+func TestRunRestartWithOptions_UppercaseNormalized(t *testing.T) {
+	// Strategy is lowercased, so "GRACEFUL" should still fail validation
+	// because we validate after lowering
+	err := runRestartWithOptions(RestartOptions{Strategy: "BOGUS", Quiet: true})
+	if err == nil {
+		t.Fatal("expected error for invalid uppercase strategy")
+	}
+}
+
+func TestRestartOptions_GracefulStopsAndRestoresPolecats(t *testing.T) {
+	// Graceful strategy should stop polecats and restore them
+	opts := RestartOptions{Strategy: StrategyGraceful}
+	if opts.Strategy != StrategyGraceful {
+		t.Errorf("strategy = %q, want %q", opts.Strategy, StrategyGraceful)
+	}
+}
+
+func TestRestartOptions_CleanDoesNotRestore(t *testing.T) {
+	// Clean strategy nukes everything and does NOT restore polecats
+	opts := RestartOptions{Strategy: StrategyClean}
+	if opts.Strategy != StrategyClean {
+		t.Errorf("strategy = %q, want %q", opts.Strategy, StrategyClean)
 	}
 }
 
 func TestDownOptions_FromFlags(t *testing.T) {
-	// Save original values
 	savedQuiet := downQuiet
 	savedForce := downForce
 	savedAll := downAll
@@ -188,7 +203,6 @@ func TestDownOptions_FromFlags(t *testing.T) {
 	savedDryRun := downDryRun
 	savedPolecats := downPolecats
 
-	// Restore after test
 	defer func() {
 		downQuiet = savedQuiet
 		downForce = savedForce
@@ -198,7 +212,6 @@ func TestDownOptions_FromFlags(t *testing.T) {
 		downPolecats = savedPolecats
 	}()
 
-	// Set test values
 	downQuiet = true
 	downForce = true
 	downAll = true
@@ -229,7 +242,6 @@ func TestDownOptions_FromFlags(t *testing.T) {
 }
 
 func TestDownOptions_ZeroValue(t *testing.T) {
-	// Test that zero-value DownOptions has sensible defaults
 	opts := DownOptions{}
 
 	if opts.Quiet != false {
@@ -244,17 +256,14 @@ func TestDownOptions_ZeroValue(t *testing.T) {
 }
 
 func TestUpOptions_FromFlags(t *testing.T) {
-	// Save original values
 	savedQuiet := upQuiet
 	savedRestore := upRestore
 
-	// Restore after test
 	defer func() {
 		upQuiet = savedQuiet
 		upRestore = savedRestore
 	}()
 
-	// Set test values
 	upQuiet = true
 	upRestore = true
 
@@ -269,7 +278,6 @@ func TestUpOptions_FromFlags(t *testing.T) {
 }
 
 func TestUpOptions_ZeroValue(t *testing.T) {
-	// Test that zero-value UpOptions has sensible defaults
 	opts := UpOptions{}
 
 	if opts.Quiet != false {
@@ -281,7 +289,6 @@ func TestUpOptions_ZeroValue(t *testing.T) {
 }
 
 func TestUpCmd_NoRestartFlag(t *testing.T) {
-	// Verify --restart flag was removed from gt up
 	flags := upCmd.Flags()
 
 	if flags.Lookup("restart") != nil {
