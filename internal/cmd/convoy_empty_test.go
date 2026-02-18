@@ -259,3 +259,83 @@ esac
 		t.Error("JSON output contains ready_issues:null — should be [] for empty convoys")
 	}
 }
+
+// TestFindStrandedConvoys_EpicFilteredFromReadyIssues verifies that an epic
+// tracked by a convoy is excluded from ReadyIssues even if it is open and
+// unassigned. Only leaf work types (task, bug, feature, chore) are slingable.
+// This exercises the IsSlingableType filter in the stranded scan path (B4).
+func TestFindStrandedConvoys_EpicFilteredFromReadyIssues(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping convoy test on Windows")
+	}
+
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	townBeads := filepath.Join(townRoot, ".beads")
+	if err := os.MkdirAll(townBeads, 0755); err != nil {
+		t.Fatalf("mkdir townBeads: %v", err)
+	}
+	// Routes so isSlingableBead can resolve gt- prefix to a rig
+	if err := os.WriteFile(filepath.Join(townBeads, "routes.jsonl"), []byte(`{"prefix":"gt-","path":"gastown/mayor/rig"}`+"\n"), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	bdPath := filepath.Join(binDir, "bd")
+
+	// Mock bd: convoy tracks one epic (gt-epic1) and one task (gt-task1).
+	// Both are open, unassigned, unblocked — but only the task should be ready.
+	script := `#!/bin/sh
+i=0
+for arg in "$@"; do
+  case "$arg" in
+    --*) ;;
+    *) eval "pos$i=\"$arg\""; i=$((i+1)) ;;
+  esac
+done
+
+case "$pos0" in
+  list)
+    echo '[{"id":"hq-cv-type1","title":"Type filter convoy"}]'
+    exit 0
+    ;;
+  dep)
+    echo '[{"id":"gt-epic1","title":"Parent epic","status":"open","issue_type":"epic","assignee":"","dependency_type":"tracks"},{"id":"gt-task1","title":"Leaf task","status":"open","issue_type":"task","assignee":"","dependency_type":"tracks"}]'
+    exit 0
+    ;;
+  show)
+    # Return details for both issues (bd show id1 id2 --json returns array)
+    echo '[{"id":"gt-epic1","title":"Parent epic","status":"open","issue_type":"epic","assignee":"","blocked_by":[],"blocked_by_count":0,"dependencies":[]},{"id":"gt-task1","title":"Leaf task","status":"open","issue_type":"task","assignee":"","blocked_by":[],"blocked_by_count":0,"dependencies":[]}]'
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`
+	if err := os.WriteFile(bdPath, []byte(script), 0755); err != nil {
+		t.Fatalf("write mock bd: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	stranded, err := findStrandedConvoys(townBeads)
+	if err != nil {
+		t.Fatalf("findStrandedConvoys() error: %v", err)
+	}
+
+	if len(stranded) != 1 {
+		t.Fatalf("expected 1 stranded convoy, got %d: %+v", len(stranded), stranded)
+	}
+
+	s := stranded[0]
+
+	// gt-epic1 should be filtered out — only gt-task1 is slingable
+	if s.ReadyCount != 1 {
+		t.Errorf("ReadyCount = %d, want 1 (epic should be filtered)", s.ReadyCount)
+	}
+	if len(s.ReadyIssues) != 1 {
+		t.Fatalf("ReadyIssues = %v, want [gt-task1]", s.ReadyIssues)
+	}
+	if s.ReadyIssues[0] != "gt-task1" {
+		t.Errorf("ReadyIssues[0] = %q, want %q", s.ReadyIssues[0], "gt-task1")
+	}
+}

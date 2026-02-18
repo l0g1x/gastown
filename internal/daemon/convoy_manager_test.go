@@ -147,7 +147,7 @@ func TestEventPoll_DetectsCloseEvents(t *testing.T) {
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 	m.pollAllStores()
 
 	// Should have logged the close detection
@@ -192,7 +192,7 @@ func TestEventPoll_SkipsNonCloseEvents(t *testing.T) {
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 	m.pollAllStores()
 
 	// Should NOT have logged any close detection
@@ -225,7 +225,7 @@ exit 0
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil, nil)
 	if err := m.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestScanStranded_FeedsReadyIssues(t *testing.T) {
 		routes:       `{"prefix":"gt-","path":"gt/.beads"}` + "\n",
 	})
 
-	m := NewConvoyManager(paths.townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(paths.townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil, nil)
 	m.scan()
 
 	data, err := os.ReadFile(paths.slingLogPath)
@@ -264,7 +264,7 @@ func TestScanStranded_ClosesEmptyConvoys(t *testing.T) {
 		strandedJSON: `[{"id":"hq-empty1","title":"Empty","ready_count":0,"ready_issues":[]}]`,
 	})
 
-	m := NewConvoyManager(paths.townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(paths.townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil, nil)
 	m.scan()
 
 	data, err := os.ReadFile(paths.checkLogPath)
@@ -290,7 +290,7 @@ func TestScanStranded_NoStrandedConvoys(t *testing.T) {
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(paths.townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(paths.townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 	m.scan()
 
 	// Negative: sling must not have been called
@@ -330,7 +330,7 @@ func TestScanStranded_DispatchFailure(t *testing.T) {
 		logMu.Unlock()
 	}
 
-	m := NewConvoyManager(paths.townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(paths.townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 	m.scan()
 
 	logMu.Lock()
@@ -376,7 +376,7 @@ exit 0
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	townRoot := t.TempDir()
-	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 10*time.Minute, nil, nil, nil, nil)
 	if err := m.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -418,7 +418,7 @@ exit 0
 		logMu.Unlock()
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 
 	// First Start should succeed
 	if err := m.Start(); err != nil {
@@ -481,7 +481,7 @@ func TestEventPoll_LazyStoreOpening(t *testing.T) {
 	}
 
 	// Start with nil stores but with an opener — should NOT exit immediately
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, nil, opener, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, nil, opener, nil, nil)
 
 	// Before any poll ticks, stores should be nil
 	if m.stores != nil {
@@ -516,13 +516,13 @@ func TestEventPoll_LazyStoreOpening(t *testing.T) {
 
 func TestConvoyManager_ScanInterval_Configurable(t *testing.T) {
 	noop := func(string, ...interface{}) {}
-	m := NewConvoyManager("/tmp", noop, "gt", 0, nil, nil, nil)
+	m := NewConvoyManager("/tmp", noop, "gt", 0, nil, nil, nil, nil)
 	if m.scanInterval != defaultStrandedScanInterval {
 		t.Errorf("interval 0 should use default %v, got %v", defaultStrandedScanInterval, m.scanInterval)
 	}
 
 	custom := 5 * time.Minute
-	m2 := NewConvoyManager("/tmp", noop, "gt", custom, nil, nil, nil)
+	m2 := NewConvoyManager("/tmp", noop, "gt", custom, nil, nil, nil, nil)
 	if m2.scanInterval != custom {
 		t.Errorf("interval should be %v, got %v", custom, m2.scanInterval)
 	}
@@ -579,7 +579,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 
 	c := strandedConvoyInfo{
 		ID:          "hq-cv1",
@@ -622,6 +622,230 @@ exit 0
 	}
 }
 
+func TestFeedFirstReady_SkipsParked_DispatchesNext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
+
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, ".beads"), 0755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	// sh- maps to shippercrm (parked), zz- has no route, gt- maps to gastown (operational)
+	routes := `{"prefix":"sh-","path":"shippercrm/.beads"}` + "\n" +
+		`{"prefix":"gt-","path":"gastown/.beads"}` + "\n"
+	if err := os.WriteFile(filepath.Join(townRoot, ".beads", "routes.jsonl"), []byte(routes), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	slingLogPath := filepath.Join(binDir, "sling.log")
+	gtScript := `#!/bin/sh
+if [ "$1" = "sling" ]; then
+  echo "$@" >> "` + slingLogPath + `"
+  exit 0
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gt"), []byte(gtScript), 0755); err != nil {
+		t.Fatalf("write mock gt: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var logged []string
+	logger := func(format string, args ...interface{}) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	// shippercrm is parked
+	parked := func(rig string) bool { return rig == "shippercrm" }
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, parked, nil)
+
+	c := strandedConvoyInfo{
+		ID:          "hq-cv1",
+		Title:       "Mixed Rigs",
+		ReadyCount:  3,
+		ReadyIssues: []string{"sh-issue1", "zz-issue2", "gt-issue3"},
+	}
+	m.feedFirstReady(c)
+
+	// sh-issue1 should be skipped (parked rig)
+	// zz-issue2 should be skipped (no rig route)
+	// gt-issue3 should be dispatched
+	data, err := os.ReadFile(slingLogPath)
+	if err != nil {
+		t.Fatalf("read sling log: %v (gt-issue3 should have been dispatched)", err)
+	}
+	logContent := string(data)
+
+	if !strings.Contains(logContent, "gt-issue3") {
+		t.Errorf("expected sling for gt-issue3, got: %q", logContent)
+	}
+	if strings.Contains(logContent, "sh-issue1") {
+		t.Errorf("sh-issue1 should not have been dispatched (parked rig): %q", logContent)
+	}
+	if strings.Contains(logContent, "zz-issue2") {
+		t.Errorf("zz-issue2 should not have been dispatched (no rig route): %q", logContent)
+	}
+
+	// Verify skip reasons were logged
+	parkedSkip := false
+	noRigSkip := false
+	for _, s := range logged {
+		if strings.Contains(s, "parked") && strings.Contains(s, "sh-issue1") {
+			parkedSkip = true
+		}
+		if strings.Contains(s, "skipping") && strings.Contains(s, "zz-issue2") {
+			noRigSkip = true
+		}
+	}
+	if !parkedSkip {
+		t.Errorf("expected parked skip log for sh-issue1, got: %v", logged)
+	}
+	if !noRigSkip {
+		t.Errorf("expected no-rig skip log for zz-issue2, got: %v", logged)
+	}
+}
+
+func TestFeedFirstReady_SlingFailure_TriesNext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
+
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, ".beads"), 0755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	routes := `{"prefix":"gt-","path":"gastown/.beads"}` + "\n"
+	if err := os.WriteFile(filepath.Join(townRoot, ".beads", "routes.jsonl"), []byte(routes), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	slingLogPath := filepath.Join(binDir, "sling.log")
+	slingCountPath := filepath.Join(binDir, "sling_count")
+	// First sling call fails, second succeeds
+	gtScript := `#!/bin/sh
+if [ "$1" = "sling" ]; then
+  echo "$@" >> "` + slingLogPath + `"
+  if [ ! -f "` + slingCountPath + `" ]; then
+    echo "1" > "` + slingCountPath + `"
+    echo "sling failed" >&2
+    exit 1
+  fi
+  exit 0
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gt"), []byte(gtScript), 0755); err != nil {
+		t.Fatalf("write mock gt: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var logged []string
+	logger := func(format string, args ...interface{}) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, nil)
+
+	c := strandedConvoyInfo{
+		ID:          "hq-cv1",
+		Title:       "Sling Retry",
+		ReadyCount:  2,
+		ReadyIssues: []string{"gt-issue1", "gt-issue2"},
+	}
+	m.feedFirstReady(c)
+
+	data, err := os.ReadFile(slingLogPath)
+	if err != nil {
+		t.Fatalf("read sling log: %v", err)
+	}
+	logContent := string(data)
+
+	// Both issues should have been attempted
+	if !strings.Contains(logContent, "gt-issue1") {
+		t.Errorf("expected sling attempt for gt-issue1, got: %q", logContent)
+	}
+	if !strings.Contains(logContent, "gt-issue2") {
+		t.Errorf("expected sling for gt-issue2 (after gt-issue1 failed), got: %q", logContent)
+	}
+
+	// Verify failure was logged
+	failLogged := false
+	for _, s := range logged {
+		if strings.Contains(s, "gt-issue1") && strings.Contains(s, "failed") {
+			failLogged = true
+			break
+		}
+	}
+	if !failLogged {
+		t.Errorf("expected sling failure log for gt-issue1, got: %v", logged)
+	}
+}
+
+func TestFeedFirstReady_AllSkipped_LogsSummary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
+
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, ".beads"), 0755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	// No routes — all prefixes will fail to resolve
+	if err := os.WriteFile(filepath.Join(townRoot, ".beads", "routes.jsonl"), []byte(""), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	slingLogPath := filepath.Join(binDir, "sling.log")
+	gtScript := `#!/bin/sh
+if [ "$1" = "sling" ]; then
+  echo "$@" >> "` + slingLogPath + `"
+  exit 0
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gt"), []byte(gtScript), 0755); err != nil {
+		t.Fatalf("write mock gt: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var logged []string
+	logger := func(format string, args ...interface{}) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, nil)
+
+	c := strandedConvoyInfo{
+		ID:          "hq-cv1",
+		Title:       "All Skip",
+		ReadyCount:  2,
+		ReadyIssues: []string{"xx-issue1", "yy-issue2"},
+	}
+	m.feedFirstReady(c)
+
+	// Sling should not have been called
+	if _, err := os.Stat(slingLogPath); err == nil {
+		data, _ := os.ReadFile(slingLogPath)
+		t.Errorf("sling was called unexpectedly: %s", data)
+	}
+
+	// Should log summary when all issues were skipped
+	summaryLogged := false
+	for _, s := range logged {
+		if strings.Contains(s, "no dispatchable issues") && strings.Contains(s, "2 skipped") {
+			summaryLogged = true
+			break
+		}
+	}
+	if !summaryLogged {
+		t.Errorf("expected 'no dispatchable issues' summary log, got: %v", logged)
+	}
+}
+
 func TestFeedFirstReady_UnknownPrefix_Skips(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
@@ -655,7 +879,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 
 	c := strandedConvoyInfo{
 		ID:          "hq-cv1",
@@ -701,7 +925,7 @@ exit 0
 		t.Fatalf("write mock gt: %v", err)
 	}
 
-	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, nil)
 
 	result, err := m.findStranded()
 	if err == nil {
@@ -731,7 +955,7 @@ exit 0
 		t.Fatalf("write mock gt: %v", err)
 	}
 
-	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, func(string, ...interface{}) {}, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, nil)
 
 	result, err := m.findStranded()
 	if err == nil {
@@ -766,7 +990,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, nil)
 
 	// scan() should not panic even when findStranded fails
 	m.scan()
@@ -797,7 +1021,7 @@ func TestPollEvents_GetAllEventsSinceError(t *testing.T) {
 	}
 
 	townRoot := t.TempDir()
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 
 	// Cancel the manager's context so GetAllEventsSince receives a cancelled context
 	m.cancel()
@@ -852,7 +1076,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 
 	c := strandedConvoyInfo{
 		ID:          "hq-cv1",
@@ -913,7 +1137,7 @@ exit 0
 
 	// isRigParked returns true for "shippercrm"
 	parked := func(rig string) bool { return rig == "shippercrm" }
-	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, parked)
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, parked, nil)
 
 	c := strandedConvoyInfo{
 		ID:          "hq-cv-park1",
@@ -968,7 +1192,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 
 	c := strandedConvoyInfo{
 		ID:          "hq-cv1",
@@ -1055,7 +1279,7 @@ exit 0
 		logMu.Unlock()
 	}
 
-	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 
 	// Run scan in a goroutine and cancel context after a brief delay
 	done := make(chan struct{})
@@ -1113,7 +1337,7 @@ func TestScanStranded_MixedReadyAndEmpty(t *testing.T) {
 		logMu.Unlock()
 	}
 
-	m := NewConvoyManager(paths.townRoot, logger, "gt", 10*time.Minute, nil, nil, nil)
+	m := NewConvoyManager(paths.townRoot, logger, "gt", 10*time.Minute, nil, nil, nil, nil)
 	m.scan()
 
 	// Verify ready convoys were dispatched via sling
@@ -1174,7 +1398,7 @@ func TestStop_ClosesLazilyOpenedStores(t *testing.T) {
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, nil, opener, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, nil, opener, nil, nil)
 
 	// Simulate lazy opening (as runEventPoll does when stores are nil)
 	m.stores = m.openStores()
@@ -1221,7 +1445,7 @@ func TestStop_ClosesMultipleStores(t *testing.T) {
 		"gastown": rigStore,
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil, nil)
 	m.Stop()
 
 	// Both stores should have been closed
@@ -1290,7 +1514,7 @@ func TestPollAllStores_MultiRig_DetectsCloseFromNonHqStore(t *testing.T) {
 		"shippercrm": rigStore,
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil, nil)
 	m.pollAllStores()
 
 	// The close event from the rig store should be detected
@@ -1352,7 +1576,7 @@ func TestPollAllStores_MultiRig_BothStoresPolled(t *testing.T) {
 		"gastown": rigStore,
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil, nil)
 	m.pollAllStores()
 
 	// Both close events should be detected
@@ -1425,7 +1649,7 @@ func TestPollAllStores_SkipsParkedRigs(t *testing.T) {
 		return rig == "shippercrm"
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, isParked)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, isParked, nil)
 	m.pollAllStores()
 
 	// Active rig's close event should be detected
@@ -1477,7 +1701,7 @@ func TestPollAllStores_HqNeverSkippedEvenIfParkedCallbackReturnsTrue(t *testing.
 	alwaysParked := func(string) bool { return true }
 
 	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute,
-		map[string]beadsdk.Storage{"hq": store}, nil, alwaysParked)
+		map[string]beadsdk.Storage{"hq": store}, nil, alwaysParked, nil)
 	m.pollAllStores()
 
 	found := false
@@ -1520,7 +1744,7 @@ func TestPollAllStores_HighWaterMark_NoReprocessing(t *testing.T) {
 	}
 
 	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute,
-		map[string]beadsdk.Storage{"hq": store}, nil, nil)
+		map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 
 	// First poll: should detect the close
 	m.pollAllStores()
@@ -1583,7 +1807,7 @@ func TestPollAllStores_PerStoreHighWaterMarks(t *testing.T) {
 		"gastown": rigStore,
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil, nil)
 
 	// First poll: only hq has a close event
 	m.pollAllStores()
@@ -1662,7 +1886,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 	m.pollAllStores()
 
 	for _, s := range logged {
@@ -1717,7 +1941,7 @@ func TestPollStore_NilHqStore_LogsWarningAndSkips(t *testing.T) {
 		"gastown": rigStore,
 	}
 
-	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil)
+	m := NewConvoyManager(t.TempDir(), logger, "gt", 10*time.Minute, stores, nil, nil, nil)
 	m.pollAllStores()
 
 	// Should log the nil hq warning
@@ -1737,5 +1961,121 @@ func TestPollStore_NilHqStore_LogsWarningAndSkips(t *testing.T) {
 		if strings.Contains(s, "close detected") {
 			t.Errorf("expected no close detection without hq store, got: %s", s)
 		}
+	}
+}
+
+// --- Rig capacity tests (US-003) ---
+
+func TestFeedFirstReady_RigAtCapacity_Skips(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
+
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, ".beads"), 0755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	routes := `{"prefix":"sh-","path":"shippercrm/.beads"}` + "\n"
+	if err := os.WriteFile(filepath.Join(townRoot, ".beads", "routes.jsonl"), []byte(routes), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	slingLogPath := filepath.Join(binDir, "sling.log")
+	gtScript := `#!/bin/sh
+if [ "$1" = "sling" ]; then
+  echo "$@" >> "` + slingLogPath + `"
+  exit 0
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gt"), []byte(gtScript), 0755); err != nil {
+		t.Fatalf("write mock gt: %v", err)
+	}
+
+	var logged []string
+	logger := func(format string, args ...interface{}) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	// isRigAtCapacity returns true for "shippercrm"
+	atCapacity := func(rig string) bool { return rig == "shippercrm" }
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, atCapacity)
+
+	c := strandedConvoyInfo{
+		ID:          "hq-cv-cap1",
+		Title:       "Capacity Convoy",
+		ReadyCount:  1,
+		ReadyIssues: []string{"sh-issue1"},
+	}
+	m.feedFirstReady(c)
+
+	// Sling should NOT have been called
+	if _, err := os.Stat(slingLogPath); err == nil {
+		data, _ := os.ReadFile(slingLogPath)
+		t.Errorf("sling was called for rig at capacity: %s", data)
+	}
+
+	// Should log the capacity skip
+	assertLogContains(t, logged, "at capacity", "shippercrm")
+}
+
+func TestFeedFirstReady_RigAtCapacity_SkipsToNext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows")
+	}
+
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, ".beads"), 0755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	// Two rigs: "shippercrm" (at capacity) and "acmeco" (not at capacity)
+	routes := `{"prefix":"sh-","path":"shippercrm/.beads"}` + "\n" +
+		`{"prefix":"ac-","path":"acmeco/.beads"}` + "\n"
+	if err := os.WriteFile(filepath.Join(townRoot, ".beads", "routes.jsonl"), []byte(routes), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	slingLogPath := filepath.Join(binDir, "sling.log")
+	gtScript := `#!/bin/sh
+if [ "$1" = "sling" ]; then
+  echo "$@" >> "` + slingLogPath + `"
+  exit 0
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(binDir, "gt"), []byte(gtScript), 0755); err != nil {
+		t.Fatalf("write mock gt: %v", err)
+	}
+
+	var logged []string
+	logger := func(format string, args ...interface{}) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	// Only shippercrm is at capacity — acmeco is not
+	atCapacity := func(rig string) bool { return rig == "shippercrm" }
+	m := NewConvoyManager(townRoot, logger, filepath.Join(binDir, "gt"), 10*time.Minute, nil, nil, nil, atCapacity)
+
+	c := strandedConvoyInfo{
+		ID:          "hq-cv-cap2",
+		Title:       "Mixed Capacity Convoy",
+		ReadyCount:  2,
+		ReadyIssues: []string{"sh-issue1", "ac-issue2"},
+	}
+	m.feedFirstReady(c)
+
+	// sh-issue1 should be skipped (capacity), ac-issue2 should be dispatched
+	data, err := os.ReadFile(slingLogPath)
+	if err != nil {
+		t.Fatalf("sling was not called — expected ac-issue2 dispatch: %v", err)
+	}
+	slingOutput := string(data)
+	if !strings.Contains(slingOutput, "ac-issue2") {
+		t.Errorf("expected ac-issue2 in sling log, got: %s", slingOutput)
+	}
+	if strings.Contains(slingOutput, "sh-issue1") {
+		t.Errorf("sh-issue1 should NOT have been slung (rig at capacity), got: %s", slingOutput)
 	}
 }

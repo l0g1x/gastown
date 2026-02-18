@@ -82,7 +82,7 @@ exit 0
 	}
 
 	// Start with short scan interval so stranded scan fires quickly.
-	m := NewConvoyManager(townRoot, logger, gtPath, 500*time.Millisecond, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, gtPath, 500*time.Millisecond, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 
 	// S-08: Start should succeed.
 	if err := m.Start(); err != nil {
@@ -274,7 +274,7 @@ exit 0
 	}
 
 	// Start manager with short scan interval; event poll is 5s (fixed).
-	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 	// Drive one poll manually instead of waiting for the 5s ticker.
 	m.pollAllStores()
 
@@ -386,7 +386,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 	m.pollAllStores()
 
 	mu.Lock()
@@ -498,7 +498,7 @@ exit 0
 		logged = append(logged, fmt.Sprintf(format, args...))
 	}
 
-	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil)
+	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil, nil)
 	m.pollAllStores()
 
 	mu.Lock()
@@ -621,7 +621,7 @@ exit 0
 
 	// isRigParked returns true for "gt" rig
 	parked := func(rig string) bool { return rig == "gt" }
-	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, parked)
+	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, parked, nil)
 	m.pollAllStores()
 
 	mu.Lock()
@@ -649,24 +649,6 @@ exit 0
 			t.Errorf("expected no feeding for parked rig, got: %s", s)
 		}
 	}
-}
-
-// assertLogContains checks that at least one log line contains all specified substrings.
-func assertLogContains(t *testing.T, logs []string, substrings ...string) {
-	t.Helper()
-	for _, line := range logs {
-		allMatch := true
-		for _, sub := range substrings {
-			if sub != "" && !strings.Contains(line, sub) {
-				allMatch = false
-				break
-			}
-		}
-		if allMatch {
-			return
-		}
-	}
-	t.Errorf("no log line contains all of %v; logs:\n%s", substrings, strings.Join(logs, "\n"))
 }
 
 // TestConvoyManager_ShutdownKillsHangingSubprocess verifies that Stop()
@@ -703,7 +685,7 @@ exit 0
 	}
 
 	// Short scan interval so the hanging gt fires immediately.
-	m := NewConvoyManager(townRoot, logger, gtPath, 100*time.Millisecond, nil, nil, nil)
+	m := NewConvoyManager(townRoot, logger, gtPath, 100*time.Millisecond, nil, nil, nil, nil)
 	if err := m.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -724,5 +706,125 @@ exit 0
 		t.Logf("Stop completed cleanly (subprocess was killed)")
 	case <-time.After(5 * time.Second):
 		t.Fatal("Stop() blocked for >5s -- hanging subprocess was NOT killed by context cancellation")
+	}
+}
+
+// TestConvoyManager_AtCapacity_SkipsFeedOnEventPoll verifies that the
+// event-driven feed path skips dispatch when isRigAtCapacity returns true.
+// Mirrors TestConvoyManager_ParkedRig_SkipsFeedOnEventPoll but for capacity.
+func TestConvoyManager_AtCapacity_SkipsFeedOnEventPoll(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows (process groups)")
+	}
+
+	store, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Convoy tracks two issues: task1 (will close) and task2 (stays open, ready to feed).
+	convoy := &beadsdk.Issue{
+		ID: "hq-cv-cap", Title: "Capacity Convoy",
+		Status: beadsdk.StatusOpen, Priority: 2,
+		IssueType: beadsdk.TypeTask, CreatedAt: now, UpdatedAt: now,
+	}
+	task1 := &beadsdk.Issue{
+		ID: "gt-cap1", Title: "Task 1 (close me)",
+		Status: beadsdk.StatusOpen, Priority: 2,
+		IssueType: beadsdk.TypeTask, CreatedAt: now, UpdatedAt: now,
+	}
+	task2 := &beadsdk.Issue{
+		ID: "gt-cap2", Title: "Task 2 (ready but rig at capacity)",
+		Status: beadsdk.StatusOpen, Priority: 3,
+		IssueType: beadsdk.TypeTask, CreatedAt: now, UpdatedAt: now,
+	}
+
+	for _, issue := range []*beadsdk.Issue{convoy, task1, task2} {
+		if err := store.CreateIssue(ctx, issue, "test"); err != nil {
+			t.Fatalf("CreateIssue %s: %v", issue.ID, err)
+		}
+	}
+	for _, taskID := range []string{task1.ID, task2.ID} {
+		dep := &beadsdk.Dependency{
+			IssueID: convoy.ID, DependsOnID: taskID,
+			Type: beadsdk.DependencyType("tracks"), CreatedAt: now, CreatedBy: "test",
+		}
+		if err := store.AddDependency(ctx, dep, "test"); err != nil {
+			t.Fatalf("AddDependency %s: %v", taskID, err)
+		}
+	}
+	if err := store.CloseIssue(ctx, task1.ID, "done", "test", ""); err != nil {
+		t.Fatalf("CloseIssue: %v", err)
+	}
+
+	// Mock gt with routes for "gt-" prefix → rig "gt"
+	binDir := t.TempDir()
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, ".beads"), 0755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	routes := `{"prefix":"gt-","path":"gt/.beads"}` + "\n"
+	if err := os.WriteFile(filepath.Join(townRoot, ".beads", "routes.jsonl"), []byte(routes), 0644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+
+	slingLogPath := filepath.Join(binDir, "sling.log")
+	gtScript := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "convoy" ] && [ "$2" = "stranded" ]; then
+  echo '[]'
+  exit 0
+fi
+if [ "$1" = "convoy" ] && [ "$2" = "check" ]; then
+  exit 0
+fi
+if [ "$1" = "sling" ]; then
+  echo "$@" >> "%s"
+  exit 0
+fi
+exit 0
+`, slingLogPath)
+	gtPath := filepath.Join(binDir, "gt")
+	if err := os.WriteFile(gtPath, []byte(gtScript), 0755); err != nil {
+		t.Fatalf("write mock gt: %v", err)
+	}
+
+	var mu sync.Mutex
+	var logged []string
+	logger := func(format string, args ...interface{}) {
+		mu.Lock()
+		defer mu.Unlock()
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	// isRigAtCapacity returns true for "gt" rig
+	atCapacity := func(rig string) bool { return rig == "gt" }
+	m := NewConvoyManager(townRoot, logger, gtPath, 1*time.Hour, map[string]beadsdk.Storage{"hq": store}, nil, nil, atCapacity)
+	m.pollAllStores()
+
+	mu.Lock()
+	snapshot := make([]string, len(logged))
+	copy(snapshot, logged)
+	mu.Unlock()
+
+	// Close event should be detected and convoy checked.
+	assertLogContains(t, snapshot, "close detected", task1.ID)
+	assertLogContains(t, snapshot, "tracked by", convoy.ID)
+	assertLogContains(t, snapshot, "checking convoy", convoy.ID)
+
+	// Feed should be skipped because rig is at capacity.
+	assertLogContains(t, snapshot, "at capacity", "gt-cap2")
+
+	// Sling should NOT have been called.
+	if _, err := os.Stat(slingLogPath); err == nil {
+		data, _ := os.ReadFile(slingLogPath)
+		t.Errorf("sling was called for rig at capacity: %s", data)
+	}
+
+	// Should NOT contain "feeding next ready issue" log.
+	for _, s := range snapshot {
+		if strings.Contains(s, "feeding next ready issue") {
+			t.Errorf("expected no feeding for rig at capacity, got: %s", s)
+		}
 	}
 }

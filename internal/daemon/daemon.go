@@ -234,11 +234,14 @@ func (d *Daemon) Run() error {
 		ok, _ := d.isRigOperational(rigName)
 		return !ok
 	}
+	isRigAtCapacity := func(rigName string) bool {
+		return d.checkRigAtCapacity(rigName)
+	}
 	var storeOpener func() map[string]beadsdk.Storage
 	if len(d.beadsStores) == 0 {
 		storeOpener = d.openBeadsStores
 	}
-	d.convoyManager = NewConvoyManager(d.config.TownRoot, d.logger.Printf, d.gtPath, 0, d.beadsStores, storeOpener, isRigParked)
+	d.convoyManager = NewConvoyManager(d.config.TownRoot, d.logger.Printf, d.gtPath, 0, d.beadsStores, storeOpener, isRigParked, isRigAtCapacity)
 	if err := d.convoyManager.Start(); err != nil {
 		d.logger.Printf("Warning: failed to start convoy manager: %v", err)
 	} else {
@@ -1348,6 +1351,31 @@ func KillOrphanedDaemons() (int, error) {
 	}
 
 	return killed, nil
+}
+
+// checkRigAtCapacity returns true if the rig has reached (or exceeded) its
+// max_polecats limit. It counts polecat worktree directories under
+// <townRoot>/<rigName>/polecats/ and compares against the rig's max_polecats
+// config value (default 10, from rig property layer).
+func (d *Daemon) checkRigAtCapacity(rigName string) bool {
+	polecatsDir := filepath.Join(d.config.TownRoot, rigName, "polecats")
+	polecats, err := listPolecatWorktrees(polecatsDir)
+	if err != nil {
+		// Can't read polecats dir — treat as not at capacity (fail open).
+		return false
+	}
+
+	r := &rig.Rig{
+		Name: rigName,
+		Path: filepath.Join(d.config.TownRoot, rigName),
+	}
+	maxPolecats := r.GetIntConfig("max_polecats")
+	if maxPolecats <= 0 {
+		// Zero or negative means unlimited (or misconfigured) — not at capacity.
+		return false
+	}
+
+	return len(polecats) >= maxPolecats
 }
 
 // checkPolecatSessionHealth proactively validates polecat tmux sessions.

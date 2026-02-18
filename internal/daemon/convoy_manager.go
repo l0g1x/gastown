@@ -60,6 +60,11 @@ type ConvoyManager struct {
 	// Parked rigs are skipped during event polling. May be nil (never parked).
 	isRigParked func(string) bool
 
+	// isRigAtCapacity reports whether a rig has reached its max_polecats limit.
+	// When at capacity, the feeder skips issues targeting that rig until a slot
+	// opens. May be nil (never at capacity).
+	isRigAtCapacity func(string) bool
+
 	gtPath string
 
 	// started guards against double-call of Start() which would spawn duplicate goroutines.
@@ -77,25 +82,30 @@ type ConvoyManager struct {
 // unless openStores is provided for lazy initialization.
 // openStores is called lazily if stores is nil (e.g., Dolt not ready at startup).
 // isRigParked reports whether a rig should be skipped during polling (nil = never parked).
+// isRigAtCapacity reports whether a rig has reached max_polecats (nil = never at capacity).
 // gtPath is the resolved path to the gt binary for subprocess calls.
-func NewConvoyManager(townRoot string, logger func(format string, args ...interface{}), gtPath string, scanInterval time.Duration, stores map[string]beadsdk.Storage, openStores func() map[string]beadsdk.Storage, isRigParked func(string) bool) *ConvoyManager {
+func NewConvoyManager(townRoot string, logger func(format string, args ...interface{}), gtPath string, scanInterval time.Duration, stores map[string]beadsdk.Storage, openStores func() map[string]beadsdk.Storage, isRigParked func(string) bool, isRigAtCapacity func(string) bool) *ConvoyManager {
 	if scanInterval <= 0 {
 		scanInterval = defaultStrandedScanInterval
 	}
 	if isRigParked == nil {
 		isRigParked = func(string) bool { return false }
 	}
+	if isRigAtCapacity == nil {
+		isRigAtCapacity = func(string) bool { return false }
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &ConvoyManager{
-		townRoot:     townRoot,
-		scanInterval: scanInterval,
-		ctx:          ctx,
-		cancel:       cancel,
-		logger:       logger,
-		stores:       stores,
-		openStores:   openStores,
-		isRigParked:  isRigParked,
-		gtPath:       gtPath,
+		townRoot:        townRoot,
+		scanInterval:    scanInterval,
+		ctx:             ctx,
+		cancel:          cancel,
+		logger:          logger,
+		stores:          stores,
+		openStores:      openStores,
+		isRigParked:     isRigParked,
+		isRigAtCapacity: isRigAtCapacity,
+		gtPath:          gtPath,
 	}
 }
 
@@ -214,7 +224,7 @@ func (m *ConvoyManager) pollStore(name string, store beadsdk.Storage) {
 		}
 
 		m.logger("Convoy: close detected: %s", issueID)
-		convoy.CheckConvoysForIssue(m.ctx, hqStore, m.townRoot, issueID, "Convoy", m.logger, m.gtPath, m.isRigParked)
+		convoy.CheckConvoysForIssue(m.ctx, hqStore, m.townRoot, issueID, "Convoy", m.logger, m.gtPath, m.isRigParked, m.isRigAtCapacity)
 	}
 
 	m.lastEventIDs.Store(name, highWater)
@@ -284,41 +294,55 @@ func (m *ConvoyManager) findStranded() ([]strandedConvoyInfo, error) {
 	return stranded, nil
 }
 
-// feedFirstReady dispatches the first ready issue to its rig via gt sling.
+// feedFirstReady iterates through all ready issues in a stranded convoy and
+// dispatches the first one that can be successfully slung. Issues are skipped
+// (with logging) when the prefix is unresolvable, the rig has no route, the
+// rig is parked, or the sling command fails. This ensures convoys progress
+// even when some issues target unavailable rigs.
 func (m *ConvoyManager) feedFirstReady(c strandedConvoyInfo) {
 	if len(c.ReadyIssues) == 0 {
 		return
 	}
-	issueID := c.ReadyIssues[0]
 
-	prefix := beads.ExtractPrefix(issueID)
-	if prefix == "" {
-		m.logger("Convoy %s: no prefix for %s, skipping", c.ID, issueID)
-		return
+	for _, issueID := range c.ReadyIssues {
+		prefix := beads.ExtractPrefix(issueID)
+		if prefix == "" {
+			m.logger("Convoy %s: no prefix for %s, skipping", c.ID, issueID)
+			continue
+		}
+
+		rig := beads.GetRigNameForPrefix(m.townRoot, prefix)
+		if rig == "" {
+			m.logger("Convoy %s: no rig for %s (prefix %s), skipping", c.ID, issueID, prefix)
+			continue
+		}
+
+		if m.isRigParked(rig) {
+			m.logger("Convoy %s: rig %s is parked, skipping %s", c.ID, rig, issueID)
+			continue
+		}
+
+		if m.isRigAtCapacity(rig) {
+			m.logger("Convoy %s: rig %s at capacity, skipping %s", c.ID, rig, issueID)
+			continue
+		}
+
+		m.logger("Convoy %s: feeding %s to %s", c.ID, issueID, rig)
+
+		cmd := exec.CommandContext(m.ctx, m.gtPath, "sling", issueID, rig, "--no-boot")
+		cmd.Dir = m.townRoot
+		util.SetProcessGroup(cmd)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			m.logger("Convoy %s: sling %s failed: %s", c.ID, issueID, util.FirstLine(stderr.String()))
+			continue
+		}
+		return // Successfully dispatched one issue
 	}
 
-	rig := beads.GetRigNameForPrefix(m.townRoot, prefix)
-	if rig == "" {
-		m.logger("Convoy %s: no rig for %s (prefix %s), skipping", c.ID, issueID, prefix)
-		return
-	}
-
-	if m.isRigParked(rig) {
-		m.logger("Convoy %s: rig %s is parked, skipping %s", c.ID, rig, issueID)
-		return
-	}
-
-	m.logger("Convoy %s: feeding %s to %s", c.ID, issueID, rig)
-
-	cmd := exec.CommandContext(m.ctx, m.gtPath, "sling", issueID, rig, "--no-boot")
-	cmd.Dir = m.townRoot
-	util.SetProcessGroup(cmd)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		m.logger("Convoy %s: sling %s failed: %s", c.ID, issueID, util.FirstLine(stderr.String()))
-	}
+	m.logger("Convoy %s: no dispatchable issues (all %d skipped)", c.ID, len(c.ReadyIssues))
 }
 
 // closeEmptyConvoy runs gt convoy check to auto-close an empty convoy.

@@ -80,7 +80,7 @@ func TestReadyIssueFilterLogic_FindsReadyIssue(t *testing.T) {
 
 func TestCheckConvoysForIssue_NilStore(t *testing.T) {
 	// Nil store returns nil immediately (no convoy checks).
-	result := CheckConvoysForIssue(context.Background(), nil, "/nonexistent/path", "gt-test", "test", nil, "gt", nil)
+	result := CheckConvoysForIssue(context.Background(), nil, "/nonexistent/path", "gt-test", "test", nil, "gt", nil, nil)
 	if result != nil {
 		t.Errorf("expected nil for nil store, got %v", result)
 	}
@@ -89,8 +89,28 @@ func TestCheckConvoysForIssue_NilStore(t *testing.T) {
 func TestCheckConvoysForIssue_NilLogger(t *testing.T) {
 	// Nil logger should not panic — gets replaced with no-op internally.
 	// With nil store, returns nil.
-	result := CheckConvoysForIssue(context.Background(), nil, "/nonexistent/path", "gt-test", "test", nil, "gt", nil)
+	result := CheckConvoysForIssue(context.Background(), nil, "/nonexistent/path", "gt-test", "test", nil, "gt", nil, nil)
 	if result != nil {
 		t.Errorf("expected nil for nil store, got %v", result)
+	}
+}
+
+// --- US-004: Bead type filtering tests ---
+
+func TestIsSlingableType_LeafWorkTypes(t *testing.T) {
+	slingable := []string{"task", "bug", "feature", "chore", ""}
+	for _, typ := range slingable {
+		if !IsSlingableType(typ) {
+			t.Errorf("IsSlingableType(%q) = false, want true (leaf work types should be slingable)", typ)
+		}
+	}
+}
+
+func TestIsSlingableType_ContainerTypes(t *testing.T) {
+	nonSlingable := []string{"epic", "convoy", "molecule", "decision", "message", "event", "gate", "agent", "rig", "role"}
+	for _, typ := range nonSlingable {
+		if IsSlingableType(typ) {
+			t.Errorf("IsSlingableType(%q) = true, want false (non-work types should not be slingable)", typ)
+		}
 	}
 }

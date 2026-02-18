@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
+	convoyops "github.com/steveyegge/gastown/internal/convoy"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tui/convoy"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -84,8 +85,10 @@ var (
 )
 
 const (
-	convoyStatusOpen   = "open"
-	convoyStatusClosed = "closed"
+	convoyStatusOpen          = "open"
+	convoyStatusClosed        = "closed"
+	convoyStatusStagedReady   = "staged:ready"
+	convoyStatusStagedWarning = "staged:warnings"
 )
 
 func normalizeConvoyStatus(status string) string {
@@ -94,14 +97,16 @@ func normalizeConvoyStatus(status string) string {
 
 func ensureKnownConvoyStatus(status string) error {
 	switch normalizeConvoyStatus(status) {
-	case convoyStatusOpen, convoyStatusClosed:
+	case convoyStatusOpen, convoyStatusClosed, convoyStatusStagedReady, convoyStatusStagedWarning:
 		return nil
 	default:
 		return fmt.Errorf(
-			"unsupported convoy status %q (expected %q or %q)",
+			"unsupported convoy status %q (expected one of: %q, %q, %q, %q)",
 			status,
 			convoyStatusOpen,
 			convoyStatusClosed,
+			convoyStatusStagedReady,
+			convoyStatusStagedWarning,
 		)
 	}
 }
@@ -119,13 +124,31 @@ func validateConvoyStatusTransition(currentStatus, targetStatus string) error {
 	if current == target {
 		return nil
 	}
-	if (current == convoyStatusOpen && target == convoyStatusClosed) ||
-		(current == convoyStatusClosed && target == convoyStatusOpen) {
+
+	// Valid transitions:
+	//   staged:ready    → open (launch)
+	//   staged:warnings → open (launch --force)
+	//   staged:ready    → staged:warnings (validation found warnings)
+	//   staged:warnings → staged:ready   (warnings resolved)
+	//   open            → closed
+	//   closed          → open (reopen)
+	// Invalid:
+	//   open → staged:* (cannot stage after launch)
+	//   closed → staged:* (cannot stage after close)
+	validTransitions := map[[2]string]bool{
+		{convoyStatusStagedReady, convoyStatusOpen}:          true,
+		{convoyStatusStagedWarning, convoyStatusOpen}:        true,
+		{convoyStatusStagedReady, convoyStatusStagedWarning}: true,
+		{convoyStatusStagedWarning, convoyStatusStagedReady}: true,
+		{convoyStatusStagedReady, convoyStatusClosed}:        true, // abandon staged convoy
+		{convoyStatusStagedWarning, convoyStatusClosed}:      true, // abandon staged convoy
+		{convoyStatusOpen, convoyStatusClosed}:               true,
+		{convoyStatusClosed, convoyStatusOpen}:               true,
+	}
+
+	if validTransitions[[2]string{current, target}] {
 		return nil
 	}
-	// With only two valid statuses, identity and both cross-transitions are
-	// covered above. This is unreachable unless new statuses are added to
-	// ensureKnownConvoyStatus without updating this function.
 	return fmt.Errorf("illegal convoy status transition %q -> %q", currentStatus, targetStatus)
 }
 
@@ -1262,11 +1285,15 @@ func findStrandedConvoys(townBeads string) ([]strandedConvoyInfo, error) {
 		// Find ready issues (open, not blocked, no live assignee, slingable).
 		// Town-level beads (hq- prefix with path=".") are excluded because
 		// they can't be dispatched via gt sling -- they're handled by the deacon.
+		// Non-slingable types (epics, convoys, etc.) are also excluded.
 		townRoot := filepath.Dir(townBeads)
 		var readyIssues []string
 		for _, t := range tracked {
 			if isReadyIssue(t) {
 				if !isSlingableBead(townRoot, t.ID) {
+					continue
+				}
+				if !convoyops.IsSlingableType(t.IssueType) {
 					continue
 				}
 				readyIssues = append(readyIssues, t.ID)

@@ -32,12 +32,15 @@ import (
 //   - gtPath: resolved path to the gt binary (e.g. from exec.LookPath or daemon config)
 //
 // Returns the convoy IDs that were checked (may be empty if issue isn't tracked).
-func CheckConvoysForIssue(ctx context.Context, store beadsdk.Storage, townRoot, issueID, caller string, logger func(format string, args ...interface{}), gtPath string, isRigParked func(string) bool) []string {
+func CheckConvoysForIssue(ctx context.Context, store beadsdk.Storage, townRoot, issueID, caller string, logger func(format string, args ...interface{}), gtPath string, isRigParked func(string) bool, isRigAtCapacity func(string) bool) []string {
 	if logger == nil {
 		logger = func(format string, args ...interface{}) {} // no-op
 	}
 	if isRigParked == nil {
 		isRigParked = func(string) bool { return false }
+	}
+	if isRigAtCapacity == nil {
+		isRigAtCapacity = func(string) bool { return false }
 	}
 	if store == nil {
 		return nil
@@ -68,7 +71,7 @@ func CheckConvoysForIssue(ctx context.Context, store beadsdk.Storage, townRoot, 
 		// reactively dispatch the next ready issue. This makes convoy feeding
 		// event-driven instead of relying on polling-based patrol cycles.
 		if !isConvoyClosed(ctx, store, convoyID) {
-			feedNextReadyIssue(ctx, store, townRoot, convoyID, caller, logger, gtPath, isRigParked)
+			feedNextReadyIssue(ctx, store, townRoot, convoyID, caller, logger, gtPath, isRigParked, isRigAtCapacity)
 		}
 	}
 
@@ -121,30 +124,65 @@ func runConvoyCheck(ctx context.Context, townRoot, convoyID, gtPath string) erro
 
 // trackedIssue holds basic info about an issue tracked by a convoy.
 type trackedIssue struct {
-	ID       string `json:"id"`
-	Status   string `json:"status"`
-	Assignee string `json:"assignee"`
-	Priority int    `json:"priority"`
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	Assignee  string `json:"assignee"`
+	Priority  int    `json:"priority"`
+	IssueType string `json:"issue_type"`
+}
+
+// slingableTypes are bead types that can be dispatched via gt sling.
+// Only leaf work items are slingable — containers (epic) and non-work types
+// (decision, message, event) are excluded. Unknown/empty types are treated
+// as slingable (beads default to "task" when IssueType is empty).
+var slingableTypes = map[string]bool{
+	"task":    true,
+	"bug":     true,
+	"feature": true,
+	"chore":   true,
+	"":        true, // Empty type defaults to task
+}
+
+// IsSlingableType reports whether a bead type can be dispatched via gt sling.
+// Exported for use by cmd/convoy.go stranded scan path.
+func IsSlingableType(issueType string) bool {
+	return slingableTypes[issueType]
 }
 
 // feedNextReadyIssue finds the next ready issue in a convoy and dispatches it
-// via gt sling. A ready issue is one that is open with no assignee. This
-// provides reactive (event-driven) convoy feeding instead of waiting for
-// polling-based patrol cycles.
+// via gt sling. A ready issue is one that is open, with no assignee, and not
+// blocked by unclosed dependencies. This provides reactive (event-driven)
+// convoy feeding instead of waiting for polling-based patrol cycles.
 //
 // Only one issue is dispatched per call. When that issue completes, the
 // next close event triggers another feed cycle.
 // gtPath is the resolved path to the gt binary.
-func feedNextReadyIssue(ctx context.Context, store beadsdk.Storage, townRoot, convoyID, caller string, logger func(format string, args ...interface{}), gtPath string, isRigParked func(string) bool) {
+func feedNextReadyIssue(ctx context.Context, store beadsdk.Storage, townRoot, convoyID, caller string, logger func(format string, args ...interface{}), gtPath string, isRigParked func(string) bool, isRigAtCapacity func(string) bool) {
 	tracked := getConvoyTrackedIssues(ctx, store, convoyID)
 	if len(tracked) == 0 {
 		return
 	}
 
-	// Find the first ready issue (open, no assignee).
+	// Find the first ready issue (open, no assignee, not blocked).
 	// Pick the first match, which is typically the highest priority.
 	for _, issue := range tracked {
 		if issue.Status != "open" || issue.Assignee != "" {
+			continue
+		}
+
+		// Filter non-slingable types: only leaf work items (task, bug,
+		// feature, chore) can be dispatched. Epics, convoys, and other
+		// container types are skipped.
+		if !IsSlingableType(issue.IssueType) {
+			logger("%s: convoy %s: %s has non-slingable type %q, skipping", caller, convoyID, issue.ID, issue.IssueType)
+			continue
+		}
+
+		// Check blocking dependencies: blocks and conditional-blocks with
+		// non-closed targets prevent dispatch. parent-child is NOT treated
+		// as blocking (consistent with molecule step behavior).
+		if isIssueBlocked(ctx, store, issue.ID) {
+			logger("%s: convoy %s: %s is blocked, skipping", caller, convoyID, issue.ID)
 			continue
 		}
 
@@ -160,14 +198,56 @@ func feedNextReadyIssue(ctx context.Context, store beadsdk.Storage, townRoot, co
 			continue
 		}
 
+		if isRigAtCapacity(rig) {
+			logger("%s: convoy %s: rig %s at capacity, skipping %s", caller, convoyID, rig, issue.ID)
+			continue
+		}
+
 		logger("%s: convoy %s: feeding next ready issue %s to %s", caller, convoyID, issue.ID, rig)
 		if err := dispatchIssue(ctx, townRoot, issue.ID, rig, gtPath); err != nil {
 			logger("%s: convoy %s: dispatch %s failed: %s", caller, convoyID, issue.ID, util.FirstLine(err.Error()))
+			continue // Try next issue on dispatch failure
 		}
-		return // Feed one at a time
+		return // Successfully dispatched one issue
 	}
 
 	logger("%s: convoy %s: no ready issues to feed", caller, convoyID)
+}
+
+// blockingDepTypes are dependency types that prevent an issue from being
+// dispatched. parent-child is intentionally excluded — a child task is
+// dispatchable even if its parent epic is open (consistent with molecule
+// step behavior in internal/cmd/molecule_step.go).
+var blockingDepTypes = map[string]bool{
+	"blocks":             true,
+	"conditional-blocks": true,
+	"waits-for":          true,
+}
+
+// isIssueBlocked checks if an issue has unclosed blocking dependencies.
+// Returns true if any blocks, conditional-blocks, or waits-for dependency
+// targets an issue that is not closed/tombstone.
+//
+// Note: this uses the hq store's dependency metadata snapshot. For cross-rig
+// issues, the blocking issue's status may be stale (see Discovery #11 in
+// convoy-lifecycle.md). This is a known limitation.
+func isIssueBlocked(ctx context.Context, store beadsdk.Storage, issueID string) bool {
+	deps, err := store.GetDependenciesWithMetadata(ctx, issueID)
+	if err != nil {
+		return false // On error, assume not blocked (fail-open)
+	}
+
+	for _, d := range deps {
+		depType := string(d.DependencyType)
+		if !blockingDepTypes[depType] {
+			continue
+		}
+		status := string(d.Status)
+		if status != "closed" && status != "tombstone" {
+			return true
+		}
+	}
+	return false
 }
 
 // getConvoyTrackedIssues returns issues tracked by a convoy with fresh status.
@@ -181,9 +261,10 @@ func getConvoyTrackedIssues(ctx context.Context, store beadsdk.Storage, convoyID
 	// Filter by tracks type and collect IDs
 	var ids []string
 	type depMeta struct {
-		status   string
-		assignee string
-		priority int
+		status    string
+		assignee  string
+		priority  int
+		issueType string
 	}
 	metaByID := make(map[string]depMeta)
 	for _, d := range deps {
@@ -191,9 +272,10 @@ func getConvoyTrackedIssues(ctx context.Context, store beadsdk.Storage, convoyID
 			id := extractIssueID(d.ID)
 			ids = append(ids, id)
 			metaByID[id] = depMeta{
-				status:   string(d.Status),
-				assignee: d.Assignee,
-				priority: d.Priority,
+				status:    string(d.Status),
+				assignee:  d.Assignee,
+				priority:  d.Priority,
+				issueType: string(d.IssueType),
 			}
 		}
 	}
@@ -221,10 +303,12 @@ func getConvoyTrackedIssues(ctx context.Context, store beadsdk.Storage, convoyID
 			t.Status = string(fresh.Status)
 			t.Assignee = fresh.Assignee
 			t.Priority = fresh.Priority
+			t.IssueType = string(fresh.IssueType)
 		} else if meta, ok := metaByID[id]; ok {
 			t.Status = meta.status
 			t.Assignee = meta.assignee
 			t.Priority = meta.priority
+			t.IssueType = meta.issueType
 		}
 		result = append(result, t)
 	}

@@ -366,7 +366,7 @@ func TestDaemon_StartsManagerAndScanner(t *testing.T) {
 		t.Fatalf("mkdir .beads: %v", err)
 	}
 
-	manager := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 1*time.Hour, nil, nil, nil)
+	manager := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 1*time.Hour, nil, nil, nil, nil)
 	if err := manager.Start(); err != nil {
 		t.Fatalf("manager Start: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestDaemon_StopsManagerAndScanner(t *testing.T) {
 		t.Fatalf("mkdir .beads: %v", err)
 	}
 
-	manager := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 1*time.Hour, nil, nil, nil)
+	manager := NewConvoyManager(townRoot, func(string, ...interface{}) {}, "gt", 1*time.Hour, nil, nil, nil, nil)
 	if err := manager.Start(); err != nil {
 		t.Fatalf("manager Start: %v", err)
 	}
@@ -400,5 +400,130 @@ func TestDaemon_StopsManagerAndScanner(t *testing.T) {
 		// Success
 	case <-time.After(5 * time.Second):
 		t.Fatal("Stop() did not complete within 5s")
+	}
+}
+
+// --- checkRigAtCapacity tests (US-003 P0: direct Daemon method coverage) ---
+
+func TestCheckRigAtCapacity_UnderLimit(t *testing.T) {
+	townRoot := t.TempDir()
+	polecatsDir := filepath.Join(townRoot, "myrig", "polecats")
+	if err := os.MkdirAll(polecatsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create 3 polecat dirs (default max_polecats=10)
+	for _, name := range []string{"goose", "badger", "otter"} {
+		if err := os.Mkdir(filepath.Join(polecatsDir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if d.checkRigAtCapacity("myrig") {
+		t.Error("3 polecats with max_polecats=10 should NOT be at capacity")
+	}
+}
+
+func TestCheckRigAtCapacity_AtLimit(t *testing.T) {
+	townRoot := t.TempDir()
+	polecatsDir := filepath.Join(townRoot, "myrig", "polecats")
+	if err := os.MkdirAll(polecatsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create exactly 10 polecat dirs (default max_polecats=10)
+	for i := range 10 {
+		name := "polecat-" + string(rune('a'+i))
+		if err := os.Mkdir(filepath.Join(polecatsDir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if !d.checkRigAtCapacity("myrig") {
+		t.Error("10 polecats with max_polecats=10 should be at capacity")
+	}
+}
+
+func TestCheckRigAtCapacity_OverLimit(t *testing.T) {
+	townRoot := t.TempDir()
+	polecatsDir := filepath.Join(townRoot, "myrig", "polecats")
+	if err := os.MkdirAll(polecatsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create 12 polecat dirs (default max_polecats=10)
+	for i := range 12 {
+		name := "polecat-" + string(rune('a'+i))
+		if err := os.Mkdir(filepath.Join(polecatsDir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if !d.checkRigAtCapacity("myrig") {
+		t.Error("12 polecats with max_polecats=10 should be at capacity")
+	}
+}
+
+func TestCheckRigAtCapacity_NoPolecatsDir(t *testing.T) {
+	// Rig exists but has no polecats/ subdirectory
+	townRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(townRoot, "myrig"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if d.checkRigAtCapacity("myrig") {
+		t.Error("missing polecats dir should fail-open (not at capacity)")
+	}
+}
+
+func TestCheckRigAtCapacity_NonexistentRig(t *testing.T) {
+	townRoot := t.TempDir()
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if d.checkRigAtCapacity("no-such-rig") {
+		t.Error("nonexistent rig should fail-open (not at capacity)")
+	}
+}
+
+func TestCheckRigAtCapacity_EmptyPolecatsDir(t *testing.T) {
+	townRoot := t.TempDir()
+	polecatsDir := filepath.Join(townRoot, "myrig", "polecats")
+	if err := os.MkdirAll(polecatsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Empty dir — zero polecats
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if d.checkRigAtCapacity("myrig") {
+		t.Error("0 polecats should NOT be at capacity")
+	}
+}
+
+func TestCheckRigAtCapacity_IgnoresDotDirsAndFiles(t *testing.T) {
+	townRoot := t.TempDir()
+	polecatsDir := filepath.Join(townRoot, "myrig", "polecats")
+	if err := os.MkdirAll(polecatsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create 9 real polecat dirs + dot-dir + regular file (should not count)
+	for i := range 9 {
+		name := "polecat-" + string(rune('a'+i))
+		if err := os.Mkdir(filepath.Join(polecatsDir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Dot-prefixed dir — should be ignored
+	if err := os.Mkdir(filepath.Join(polecatsDir, ".tmp-cleanup"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Regular file — should be ignored
+	if err := os.WriteFile(filepath.Join(polecatsDir, "README"), []byte("hi"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &Daemon{config: &Config{TownRoot: townRoot}}
+	if d.checkRigAtCapacity("myrig") {
+		t.Error("9 real polecats + dot-dir + file with max_polecats=10 should NOT be at capacity")
 	}
 }
