@@ -1,2 +1,401 @@
-{"author":"gastown/polecats/furiosa","created_at":"2026-02-16T08:20:52Z","id":2,"issue_id":"gt-kvo.5","text":"## Correctness Review Completed\n\n### Fix Applied\n- **Removed false dep:** gt-kvo.1.2 → gt-kvo.1.3\n- Rationale: `prepare` validates MR is claimed but doesn't need `next` to exist — test fixtures can have pre-claimed MRs\n\n### Critical Path Improvement\n- Before: .1.1 → .1.2 → .1.3 → {.1.4, .1.5}\n- After: .1.1 → {.1.2, .1.3} → {.1.4, .1.5}\n- Saves ~1 task on Phase 1 critical path\n\n### Verified Correct\n- All other dependencies are logically correct\n- All tasks are appropriately scoped\n- Phase 3 parallelization with Phase 1/2 already enabled\n\n### No Issues Found\n- Task scoping: Each task is a single completable unit\n- No circular dependencies\n- Priority levels appropriate"}
-{"author":"mayor","created_at":"2026-02-22T06:21:59Z","id":3,"issue_id":"gt-w1moa","text":"New manifestation (2026-02-22): polecat gt done fails with 'chdir .beads: no such file or directory' when polecat CWD is a subdirectory of the repo (e.g. beads-ide/). Seen in bcc-jumu6.1.6 (nitro) and bcc-jumu6.2.4 (chrome). Root cause: bd resolves .beads relative to CWD instead of walking up like git finds .git. Fix: bd should walk up directory tree to find .beads. Workaround: bcc/witness manually creates MR beads from witness context."}
+{"author":"mayor","created_at":"2026-01-31T04:03:35Z","id":1,"issue_id":"oe-7vg.1","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:35Z","id":2,"issue_id":"oe-7vg.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run test:e2e         # UI story - e2e required\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"openedi/polecats/furiosa","created_at":"2026-02-02T21:11:48Z","id":3,"issue_id":"oe-9r35","text":"## Setup Instructions from System Bringup (oe-pwmb)\n\n### Prerequisites\n- Bun \u003e= 1.0\n- Node.js \u003e= 20\n- Secrets file at `~/gt/.secrets/openedi/.env`\n\n### Environment Variables Required\nThe secrets file must contain:\n```\nNODE_ENV=development\nVITE_CONVEX_URL=https://flippant-bison-717.convex.cloud\nCONVEX_DEPLOYMENT=dev:flippant-bison-717\nCONVEX_DEPLOY_KEY=dev:flippant-bison-717|\u003ctoken\u003e\nENCRYPTION_KEY=\u003c32-byte-hex\u003e\n```\n\n### Commands\n```bash\n# Install dependencies\nbun install\n\n# Start all services (web, backend, AS2)\nbun run dev\n\n# Build all packages\nbun run build\n\n# Run tests\nbun run test\n```\n\n### Service Ports\n| Service | Port | URL |\n|---------|------|-----|\n| Web (Vite) | 3000 | http://localhost:3000 |\n| AS2 Server | 4080 | http://localhost:4080 |\n| Convex Dashboard | - | https://dashboard.convex.dev/d/flippant-bison-717 |\n\n### Order of Service Startup\nTurbo runs all dev tasks in parallel. No specific order required - each service is independent.\n\n### Note on Worktrees\nSecrets are NOT symlinked. Instead:\n- Backend uses `--env-file ~/gt/.secrets/openedi/.env`\n- Web uses `envDir: ~/gt/.secrets/openedi` in vite.config.ts"}
+{"author":"mayor","created_at":"2026-01-31T04:03:04Z","id":4,"issue_id":"oe-b70.1","text":"## Polecat Instructions\n\n**This is a research spike - no code quality gates apply.**\n\n### Deliverable\nCreate a decision document in `docs/adr/` with:\n- Options evaluated\n- Pros/cons for each\n- Recommendation with rationale\n- Any prototype code (if applicable)\n\n### Time-box\n1 day maximum."}
+{"author":"openedi/polecats/nux","created_at":"2026-01-31T04:14:47Z","id":5,"issue_id":"oe-b70.1","text":"## Completed\n\nDelivered ADR-001: EDI Parser Technology Decision\n\n**Recommendation:** Build custom parser for envelope handling with zero dependencies.\n\n**Deliverables:**\n- `docs/adr/001-edi-parser-technology.md` - Decision document with pros/cons and rationale\n- `docs/adr/prototypes/envelope-parser-poc.ts` - Working POC demonstrating feasibility\n\n**Key findings:**\n1. ISA segment's fixed 106-char length makes delimiter detection reliable\n2. Streaming approach (like x12-parser) handles GB-scale files\n3. Custom parser gives full control with zero external dependencies\n4. Stedi can be optional integration for advanced validation later"}
+{"author":"mayor","created_at":"2026-01-31T04:03:19Z","id":6,"issue_id":"oe-b70.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\n```\n\n### Test Fixtures\nUse EDI samples in `packages/edi-parser/tests/fixtures/`"}
+{"author":"mayor","created_at":"2026-01-31T04:03:19Z","id":7,"issue_id":"oe-b70.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\n```\n\n### Test Fixtures\nUse EDI samples in `packages/edi-parser/tests/fixtures/`"}
+{"author":"mayor","created_at":"2026-01-31T04:03:20Z","id":8,"issue_id":"oe-b70.4","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\n```\n\n### Test Fixtures\nUse EDI samples in `packages/edi-parser/tests/fixtures/`"}
+{"author":"mayor","created_at":"2026-01-31T04:03:22Z","id":9,"issue_id":"oe-b70.5","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # Needed for control number sequences\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:22Z","id":10,"issue_id":"oe-b70.6","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # Needed for control number sequences\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T03:58:43Z","id":11,"issue_id":"oe-b70.7","text":"## Note: Convex Local Development\n\nWhen testing Convex HTTP actions for this spike, you can use local Convex development (no account needed):\n\n```bash\nnpx convex dev --local --once\n```\n\nThis runs the open-source backend locally. The spike can test payload handling and latency against this local instance before any cloud deployment.\n\n**Limitation:** Local deployments have no public URL, so AS2 endpoint testing with external partners would need ngrok or similar tunnel."}
+{"author":"mayor","created_at":"2026-01-31T04:03:04Z","id":12,"issue_id":"oe-b70.7","text":"## Polecat Instructions\n\n**This is a research spike - no code quality gates apply.**\n\n### Deliverable\nCreate a decision document in `docs/adr/` with:\n- Options evaluated\n- Pros/cons for each\n- Recommendation with rationale\n- Any prototype code (if applicable)\n\n### Time-box\n1 day maximum."}
+{"author":"mayor","created_at":"2026-01-31T03:58:48Z","id":13,"issue_id":"oe-bhi.1","text":"## Environment Variables Strategy\n\nFor initial development, most env vars can be deferred:\n\n| Variable | Dev Approach |\n|----------|--------------|\n| `CONVEX_URL` | Auto-set by `npx convex dev --local` |\n| `AS2_PORT` | Use default 4080 for dev |\n| `LOG_LEVEL` | Default to \"debug\" |\n| `STORAGE_PROVIDER` | Not needed until oe-wy7.4 |\n| SMTP/Alert vars | Not needed until oe-wy7.3 |\n\nCreate `.env.example` with all variables documented, but `.env.local` can start minimal."}
+{"author":"mayor","created_at":"2026-01-31T04:03:07Z","id":14,"issue_id":"oe-bhi.1","text":"## Polecat Instructions\n\n**This is the bootstrap story - it creates the quality gate infrastructure.**\n\n### Setup\nNo prior setup needed - this creates the monorepo from scratch.\n\n### Verification (before closing)\n```bash\nbun install              # Must succeed\nbun run build            # Must build all packages\nbun run typecheck        # Must pass (or tsc fallback)\nbun run lint             # Must pass\nbun run format:check     # Must pass\n```\n\nThese commands become the quality gates for all subsequent stories."}
+{"author":"mayor","created_at":"2026-01-31T04:03:09Z","id":15,"issue_id":"oe-bhi.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates (after implementation)\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test             # Must pass (this story creates test infra)\nbun run test:e2e         # Must pass (this story creates e2e infra)\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:14Z","id":16,"issue_id":"oe-bhi.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run test:e2e         # UI story - e2e required\n```"}
+{"author":"mayor","created_at":"2026-01-31T03:58:40Z","id":17,"issue_id":"oe-bhi.4","text":"## Local Development (No Account Required)\n\nConvex supports local development without creating an account:\n\n```bash\n# First run - select \"develop locally\" when prompted\nnpx convex dev\n\n# Or explicitly enable local mode\nnpx convex dev --local --once\n```\n\n**How it works:**\n- Runs open-source Convex backend as subprocess on localhost\n- Local dashboard available at http://localhost:6790\n- State stored in `~/.convex/` directory\n- Sets `CONVEX_URL` in `.env.local` automatically\n\n**Limitations:**\n- No public URL (use ngrok if external webhooks needed during dev)\n- Logs clear when `convex dev` restarts\n- Safari/Brave may block localhost requests\n\n**Transitioning to Production:**\n```bash\nnpx convex login  # Link local work to account when ready\n```\n\nSee: https://docs.convex.dev/cli/local-deployments"}
+{"author":"mayor","created_at":"2026-01-31T04:03:17Z","id":18,"issue_id":"oe-bhi.4","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # Start local Convex backend\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check   # Convex schema validation\n```\n\nKeep `npx convex dev` running in background during development."}
+{"author":"mayor","created_at":"2026-01-31T04:03:51Z","id":19,"issue_id":"oe-bql.1","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run test:e2e         # UI story - e2e required\nbun run --filter @openedi/backend convex:check\n```\n\n### Dev Server\n```bash\nbun run --filter @openedi/web dev   # Runs on localhost:5173\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:51Z","id":20,"issue_id":"oe-bql.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run test:e2e         # UI story - e2e required\nbun run --filter @openedi/backend convex:check\n```\n\n### Dev Server\n```bash\nbun run --filter @openedi/web dev   # Runs on localhost:5173\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:51Z","id":21,"issue_id":"oe-bql.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run test:e2e         # UI story - e2e required\nbun run --filter @openedi/backend convex:check\n```\n\n### Dev Server\n```bash\nbun run --filter @openedi/web dev   # Runs on localhost:5173\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:51Z","id":22,"issue_id":"oe-bql.4","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```\n\n### Note\nUses Convex Auth. For OAuth testing (Google/GitHub), you'll need to configure OAuth apps - can defer to production setup."}
+{"author":"openedi/polecats/furiosa","created_at":"2026-02-02T21:12:07Z","id":23,"issue_id":"oe-fow6","text":"## AS2 Server Integration from System Bringup (oe-pwmb)\n\n### How AS2 Server Starts\n- Package: `@open-edi/as2-server`\n- Command: `bun run --watch src/index.ts`\n- Started by turbo as part of `bun run dev`\n\n### Endpoints\n| Endpoint | Method | URL |\n|----------|--------|-----|\n| AS2 Receive | POST | http://localhost:4080/as2/receive |\n| Health Check | GET | http://localhost:4080/health |\n\n### Dependencies\n- No external dependencies required for basic startup\n- Optional: `AS2_PRIVATE_KEY` and `AS2_CERTIFICATE` environment variables for full S/MIME support\n\n### Startup Warning\nWhen certificates are not configured, the server logs:\n`AS2_PRIVATE_KEY and AS2_CERTIFICATE environment variables not set`\nThis is expected in development - the server still starts and can receive test messages.\n\n### Integration with Convex\nThe AS2 server can call Convex functions to store received messages. It uses the same CONVEX_DEPLOYMENT from the secrets file."}
+{"author":"mayor","created_at":"2026-01-31T23:29:17Z","id":24,"issue_id":"oe-kei8","text":"Work not complete - oe-kei8.5 created to fix skipped tests"}
+{"author":"mayor","created_at":"2026-01-31T21:16:21Z","id":25,"issue_id":"oe-kei8.3","text":"Tests can now run - 11 failures need fixing. agent-browser skill now available."}
+{"author":"mayor","created_at":"2026-01-31T04:03:29Z","id":26,"issue_id":"oe-nyo.1","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # For transaction/partner storage\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```\n\n### Note\nAS2 server runs in `apps/as2-server/`. For integration testing with external partners, use ngrok to expose local endpoint."}
+{"author":"mayor","created_at":"2026-01-31T04:03:30Z","id":27,"issue_id":"oe-nyo.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # For transaction/partner storage\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```\n\n### Note\nAS2 server runs in `apps/as2-server/`. For integration testing with external partners, use ngrok to expose local endpoint."}
+{"author":"mayor","created_at":"2026-01-31T04:03:30Z","id":28,"issue_id":"oe-nyo.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # For transaction/partner storage\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```\n\n### Note\nAS2 server runs in `apps/as2-server/`. For integration testing with external partners, use ngrok to expose local endpoint."}
+{"author":"mayor","created_at":"2026-02-02T21:22:57Z","id":29,"issue_id":"oe-nyo.3","text":"## Work Rescued from Interrupted Polecat\n\nNux's work was preserved to branch `rescue/nux-as2-sender-oe-nyo.3` before the witness cleaned up the polecat.\n\n### Implemented (1477 lines):\n- `apps/as2-server/src/as2/sender.ts` - Core AS2 sender with S/MIME\n- `apps/as2-server/src/as2/smime.ts` - S/MIME signing/encryption\n- `packages/backend/convex/as2Deliveries.ts` - Delivery tracking mutations\n\n### Verified vs Acceptance Criteria:\n- ✅ Sign outbound messages using private key\n- ✅ Encrypt using partner certificate (AES-256, 3DES)\n- ✅ Proper AS2 headers (AS2-From, AS2-To, Message-ID, etc.)\n- ✅ Async MDN request support\n- ⚠️ MDN receipt handling (sync parsing done, Convex integration unclear)\n- ❓ Retry logic (check as2Deliveries.ts)\n- ✅ HTTPS enforcement (ALLOW_HTTP_AS2=true for dev)\n- ✅ mTLS support\n- ✅ Certificate pinning\n\n### To Complete:\n1. Verify retry logic with exponential backoff + circuit breaker\n2. Verify Convex integration updates message status on MDN\n3. Run tests and fix any issues\n4. Submit MR"}
+{"author":"mayor","created_at":"2026-01-31T04:03:30Z","id":30,"issue_id":"oe-nyo.4","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once   # For transaction/partner storage\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```\n\n### Note\nAS2 server runs in `apps/as2-server/`. For integration testing with external partners, use ngrok to expose local endpoint."}
+{"author":"openedi/crew/human","created_at":"2026-02-02T21:09:35Z","id":31,"issue_id":"oe-pbls","text":"## Critical Finding: Auth Bypass is Frontend-Only\n\n**The `VITE_E2E_TEST_MODE=true` bypass is INCOMPLETE.**\n\n### What it does:\n```typescript\n// apps/web/src/routes/__root.tsx\nconst isE2ETestMode = import.meta.env.VITE_E2E_TEST_MODE === 'true'\n\n// Only skips the redirect to /login\nif (isE2ETestMode) return  // in useEffect\nif (!isAuthenticated \u0026\u0026 !isE2ETestMode) return null  // render guard\n```\n\n### What it DOESN'T do:\n- Does NOT authenticate with Convex backend\n- Does NOT provide a valid session/token\n- Convex queries/mutations will FAIL or return empty data\n\n### Why tests might \"pass\" anyway:\n1. Tests hit cloud Convex (`https://flippant-bison-717.convex.cloud`) with stale data\n2. ConvexTestClient uses HTTP client which might bypass auth differently\n3. Tests only check for UI elements, not actual authenticated data flows\n4. Some queries might be public (no auth required)\n\n### What SHOULD happen:\nE2E tests should either:\n1. Use a proper test user with real Convex auth\n2. Have Convex backend in a test mode that allows unauthenticated access\n3. Mock at the Convex provider level with realistic data\n\n### Investigation needed:\n- Check if `api.tradingPartners.create` requires auth\n- Check if `api.transactions.create` requires auth\n- Verify what data ConvexTestClient actually sees\n- Test with auth bypass OFF to see what breaks\n"}
+{"author":"openedi/crew/human","created_at":"2026-02-02T21:09:59Z","id":32,"issue_id":"oe-pbls","text":"## Backend Auth Discovery: Mutations appear UNPROTECTED\n\nChecked `packages/backend/convex/tradingPartners.ts`:\n\n```typescript\nexport const create = mutation({\n  args: { ... },\n  handler: async (ctx, args) =\u003e {\n    // NO AUTH CHECK HERE\n    // Goes straight to business logic\n    const existingIsa = await ctx.db.query('tradingPartners')...\n```\n\n**The Convex mutations don't check `ctx.auth` at all!**\n\nThis explains why E2E tests \"work\" - the backend accepts unauthenticated requests.\n\n### Implications:\n1. E2E tests pass because backend has no auth\n2. Frontend auth bypass is irrelevant - backend was never checking anyway\n3. This is a **security issue** - anyone can create/modify data\n4. The entire auth implementation may be incomplete\n\n### Files to audit for auth:\n- `packages/backend/convex/tradingPartners.ts` - NO AUTH\n- `packages/backend/convex/transactions.ts` - likely NO AUTH\n- `packages/backend/convex/auth.ts` - check what's actually implemented\n- `packages/backend/convex/authFunctions.ts` - check if these are used anywhere\n"}
+{"author":"openedi/polecats/furiosa","created_at":"2026-02-02T21:12:15Z","id":33,"issue_id":"oe-pbls","text":"## E2E Test Configuration from System Bringup (oe-pwmb)\n\n### Correct Convex URLs\n- **Client URL**: https://flippant-bison-717.convex.cloud\n- **Site URL**: https://flippant-bison-717.convex.site (for HTTP actions)\n\n### E2E Test Mode\nSet `VITE_E2E_TEST_MODE=true` to bypass authentication for E2E tests.\n\n### Test Data Setup\nUse ConvexHttpClient for test data:\n```typescript\nimport { ConvexHttpClient } from 'convex/browser'\nconst client = new ConvexHttpClient('https://flippant-bison-717.convex.cloud')\n```\n\n### Environment for Tests\nThe E2E tests should source from the same secrets file:\n`~/gt/.secrets/openedi/.env`\n\nOr set explicitly in playwright.config.ts:\n```typescript\nuse: {\n  baseURL: 'http://localhost:3000',\n},\nwebServer: {\n  env: {\n    VITE_CONVEX_URL: 'https://flippant-bison-717.convex.cloud',\n    VITE_E2E_TEST_MODE: 'true',\n  },\n},\n```"}
+{"author":"openedi/crew/human","created_at":"2026-02-02T21:14:37Z","id":34,"issue_id":"oe-pbls","text":"## MANDATORY: Eliminate Auth Bypass and Test Real Authentication\n\n### Requirements from Overseer:\n\n1. **REMOVE all auth bypasses**\n   - Delete `VITE_E2E_TEST_MODE` environment variable usage\n   - Remove `isE2ETestMode` bypass logic from `__root.tsx`\n   - Remove `VITE_E2E_TEST_MODE=true` from `scripts/start-e2e-servers.sh`\n\n2. **Authentication MUST be tested**\n   - Test login flow with valid credentials\n   - Test login failure with invalid credentials\n   - Test logout flow\n   - Test session persistence\n   - Test redirect to login when not authenticated\n\n3. **ALL E2E tests must run as authenticated user**\n   - Use Playwright's `storageState` for session persistence\n   - Create proper auth setup fixture that logs in once and shares state\n   - Every test (except auth tests) should start authenticated\n\n4. **Exception: Unauthenticated access tests**\n   - Test that protected routes redirect to login\n   - Test that unauthenticated API calls are rejected\n   - These are the ONLY tests that should run without auth\n\n5. **Proper test data fixtures**\n   - Seed data through authenticated Convex mutations\n   - Clean up test data after each test\n   - Don't rely on stale cloud data\n\n### Implementation Pattern:\n\n```typescript\n// auth.setup.ts - runs ONCE before all tests\nimport { test as setup } from '@playwright/test'\n\nsetup('authenticate', async ({ page }) =\u003e {\n  await page.goto('/login')\n  await page.fill('[name=\"email\"]', process.env.E2E_TEST_EMAIL)\n  await page.fill('[name=\"password\"]', process.env.E2E_TEST_PASSWORD)\n  await page.click('button[type=\"submit\"]')\n  await page.waitForURL('/')\n  \n  // Save auth state for all tests\n  await page.context().storageState({ path: '.auth/user.json' })\n})\n\n// playwright.config.ts\nexport default defineConfig({\n  projects: [\n    { name: 'setup', testMatch: /auth\\.setup\\.ts/ },\n    {\n      name: 'authenticated',\n      dependencies: ['setup'],\n      use: { storageState: '.auth/user.json' },\n    },\n    {\n      name: 'unauthenticated',\n      testMatch: /unauth\\.spec\\.ts/,\n      // No storageState - tests unauthenticated access\n    },\n  ],\n})\n```\n\n### Files to modify:\n- `apps/web/src/routes/__root.tsx` - remove E2E bypass\n- `apps/web/scripts/start-e2e-servers.sh` - remove VITE_E2E_TEST_MODE\n- `apps/web/playwright.config.ts` - add proper project setup\n- `apps/web/tests/e2e/auth.setup.ts` - implement real auth\n- `apps/web/tests/e2e/fixtures/` - update to not bypass auth\n- All `*.spec.ts` files - ensure they use authenticated context\n"}
+{"author":"openedi/crew/human","created_at":"2026-02-02T21:00:54Z","id":35,"issue_id":"oe-pwmb","text":"## Information Propagation Requirement\n\nWhen this task is completed, the worker MUST comment on the following beads with the discovered setup/usage information:\n\n1. **oe-9r35** (Documentation) - Full setup instructions, environment variables, commands\n2. **oe-whxe** (Frontend Integration) - Convex URL configuration, how frontend connects\n3. **oe-fow6** (AS2 Server) - How AS2 server starts, its dependencies\n4. **oe-pbls** (E2E Tests) - What the correct local Convex URL should be\n\n### Information to capture and propagate:\n- Exact bun install output and any issues\n- What bun run dev starts (turbo output)\n- The local Convex URL that gets generated\n- Any environment variables that must be set\n- Port numbers for each service\n- Order of service startup\n- Any secrets needed from ~/gt/secrets\n"}
+{"author":"openedi/polecats/furiosa","created_at":"2026-02-02T21:12:23Z","id":36,"issue_id":"oe-pwmb","text":"## System Bringup Completed\n\n### Changes Made\n1. **packages/backend/package.json**: Changed dev script to `convex dev --env-file ~/gt/.secrets/openedi/.env`\n2. **apps/web/vite.config.ts**: Added `envDir: ~/gt/.secrets/openedi` for Vite to read VITE_CONVEX_URL\n3. **packages/backend/package.json**: Added missing `@open-edi/shared` dependency\n4. **packages/backend/convex/scheduledTasks.ts**: Fixed type error (`validTo` -\u003e `details?.validUntil`)\n\n### Services Running\n- Web: http://localhost:3000\n- AS2: http://localhost:4080\n- Convex: flippant-bison-717\n\n### Information Propagated To\n- oe-9r35: Full setup documentation\n- oe-whxe: Frontend-Convex integration\n- oe-fow6: AS2 server details\n- oe-pbls: E2E test configuration"}
+{"author":"mayor","created_at":"2026-01-31T04:03:31Z","id":37,"issue_id":"oe-tfu.1","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:31Z","id":38,"issue_id":"oe-tfu.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:31Z","id":39,"issue_id":"oe-tfu.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"openedi/polecats/furiosa","created_at":"2026-02-02T21:11:58Z","id":40,"issue_id":"oe-whxe","text":"## Frontend-Convex Integration from System Bringup (oe-pwmb)\n\n### Convex URL Configuration\nThe frontend connects to Convex via `VITE_CONVEX_URL` environment variable:\n- **Development**: https://flippant-bison-717.convex.cloud\n- Loaded from `~/gt/.secrets/openedi/.env` via vite.config.ts `envDir`\n\n### How Frontend Connects\n```typescript\n// apps/web/src/main.tsx or similar\nimport { ConvexProvider, ConvexReactClient } from 'convex/react'\n\nconst convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL)\n\n// Wrap app with ConvexProvider\n\u003cConvexProvider client={convex}\u003e\n  \u003cApp /\u003e\n\u003c/ConvexProvider\u003e\n```\n\n### Real-time Subscriptions\nConvex provides automatic real-time updates via useQuery hooks. No additional WebSocket config needed.\n\n### Vite Config Change\nAdded to vite.config.ts:\n```typescript\nenvDir: resolve(homedir(), 'gt/.secrets/openedi')\n```\nThis allows the web app to read VITE_CONVEX_URL from the canonical secrets location."}
+{"author":"mayor","created_at":"2026-01-31T04:03:53Z","id":41,"issue_id":"oe-wy7.1","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\n```\n\n### Docker Verification\n```bash\ndocker build -t openedi-web -f tooling/docker/Dockerfile.web .\ndocker build -t openedi-as2 -f tooling/docker/Dockerfile.as2 .\ndocker-compose up --build   # Full stack test\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:53Z","id":42,"issue_id":"oe-wy7.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:53Z","id":43,"issue_id":"oe-wy7.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:54Z","id":44,"issue_id":"oe-wy7.4","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```\n\n### Note\nFor S3/GCS/R2 integration testing, you can use LocalStack or MinIO locally."}
+{"author":"mayor","created_at":"2026-01-31T04:03:33Z","id":45,"issue_id":"oe-zdm.1","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:33Z","id":46,"issue_id":"oe-zdm.2","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:33Z","id":47,"issue_id":"oe-zdm.3","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:04Z","id":48,"issue_id":"oe-zdm.4","text":"## Polecat Instructions\n\n**This is a research spike - no code quality gates apply.**\n\n### Deliverable\nCreate a decision document in `docs/adr/` with:\n- Options evaluated\n- Pros/cons for each\n- Recommendation with rationale\n- Any prototype code (if applicable)\n\n### Time-box\n1 day maximum."}
+{"author":"mayor","created_at":"2026-01-31T04:03:33Z","id":49,"issue_id":"oe-zdm.5","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"mayor","created_at":"2026-01-31T04:03:34Z","id":50,"issue_id":"oe-zdm.6","text":"## Polecat Instructions\n\n### Startup\n```bash\nbun install\nnpx convex dev --local --once\n```\n\n### Quality Gates\n```bash\nbun run typecheck\nbun run lint\nbun run format:check\nbun run test\nbun run --filter @openedi/backend convex:check\n```"}
+{"author":"openedi/crew/slit","created_at":"2026-01-31T18:59:02Z","id":51,"issue_id":"oe-zdm.6","text":"API implementation complete:\n- GET /api/v1/archive/transactions (same filters as Query API)\n- POST /api/v1/archive/restore (initiate cold storage retrieval)\n- GET /api/v1/archive/jobs/:jobId (check restore status)\n- GET /api/v1/archive/jobs/:jobId/results (get restored results)\n\nSchema additions:\n- archivedTransactions table with storageClass (warm/cold)\n- archiveRestoreJobs table for tracking cold-\u003ewarm restores\n\nWaiting on oe-wy7.4 (Object Storage Integration) for full integration.\nThe archive module is ready to integrate once storage provider is configured."}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:19Z","id":75,"issue_id":"hq-026a","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:20Z","id":77,"issue_id":"hq-06u4kl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:24Z","id":86,"issue_id":"hq-0uho25","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:24Z","id":87,"issue_id":"hq-0w48we","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:24Z","id":88,"issue_id":"hq-0w60j","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:25Z","id":90,"issue_id":"hq-0xgkcy","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:25Z","id":91,"issue_id":"hq-0z3v4f","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:27Z","id":93,"issue_id":"hq-1644m1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:30Z","id":103,"issue_id":"hq-1jzs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:30Z","id":104,"issue_id":"hq-1k55","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:32Z","id":107,"issue_id":"hq-1s3e26","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:33Z","id":108,"issue_id":"hq-1vps7w","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:33Z","id":109,"issue_id":"hq-1w9z7k","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:34Z","id":112,"issue_id":"hq-1xnjdq","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:35Z","id":117,"issue_id":"hq-23ndri","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:36Z","id":118,"issue_id":"hq-24xres","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:36Z","id":119,"issue_id":"hq-28j95a","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:38Z","id":124,"issue_id":"hq-2lx1b4","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:38Z","id":126,"issue_id":"hq-2o68h","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:39Z","id":128,"issue_id":"hq-2uux6l","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:40Z","id":130,"issue_id":"hq-2vo7xz","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:42Z","id":137,"issue_id":"hq-367azf","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:42Z","id":138,"issue_id":"hq-374tnp","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:44Z","id":142,"issue_id":"hq-3iegs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:44Z","id":143,"issue_id":"hq-3m902d","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:46Z","id":149,"issue_id":"hq-3s6jo9","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:46Z","id":151,"issue_id":"hq-3utga0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:47Z","id":152,"issue_id":"hq-3v8yiz","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:47Z","id":153,"issue_id":"hq-3vcprs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:49Z","id":162,"issue_id":"hq-49qtmm","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:51Z","id":166,"issue_id":"hq-4cpox3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:51Z","id":167,"issue_id":"hq-4ftegg","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:53Z","id":173,"issue_id":"hq-4s6w0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:54Z","id":174,"issue_id":"hq-4sn6jj","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:54Z","id":175,"issue_id":"hq-4sv1g6","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:55Z","id":181,"issue_id":"hq-4zora","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:56Z","id":183,"issue_id":"hq-52gf6","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:58Z","id":187,"issue_id":"hq-5e1ub","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:18:59Z","id":190,"issue_id":"hq-5gfp8g","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:00Z","id":193,"issue_id":"hq-5l9ngj","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:00Z","id":195,"issue_id":"hq-5lr5t","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:00Z","id":196,"issue_id":"hq-5m92","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:00Z","id":197,"issue_id":"hq-5pcsor","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:01Z","id":199,"issue_id":"hq-5quf7","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:01Z","id":202,"issue_id":"hq-5ulm8d","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:03Z","id":207,"issue_id":"hq-667o","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:03Z","id":208,"issue_id":"hq-68af1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:06Z","id":215,"issue_id":"hq-6ixkb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:07Z","id":218,"issue_id":"hq-6k8aj","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:09Z","id":223,"issue_id":"hq-73m5vr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:10Z","id":225,"issue_id":"hq-7652li","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:11Z","id":226,"issue_id":"hq-76jmmx","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:13Z","id":231,"issue_id":"hq-7b22zh","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:13Z","id":232,"issue_id":"hq-7dzsxn","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:14Z","id":235,"issue_id":"hq-7hxlek","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:15Z","id":238,"issue_id":"hq-7l6iod","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:17Z","id":244,"issue_id":"hq-7sud3t","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:18Z","id":247,"issue_id":"hq-7ux8x0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:19Z","id":252,"issue_id":"hq-81p3st","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:20Z","id":254,"issue_id":"hq-89qd7g","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:20Z","id":256,"issue_id":"hq-8bm5wj","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:21Z","id":259,"issue_id":"hq-8iovyr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:21Z","id":260,"issue_id":"hq-8l985i","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:21Z","id":261,"issue_id":"hq-8mhs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:21Z","id":262,"issue_id":"hq-8n5etv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:22Z","id":264,"issue_id":"hq-8s1fv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:22Z","id":266,"issue_id":"hq-8sqp","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:24Z","id":270,"issue_id":"hq-8xmty","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:27Z","id":275,"issue_id":"hq-9byp6","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:28Z","id":279,"issue_id":"hq-9h68t7","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:28Z","id":281,"issue_id":"hq-9jlyu1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:30Z","id":287,"issue_id":"hq-9svrzr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:32Z","id":294,"issue_id":"hq-a3wm32","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:33Z","id":295,"issue_id":"hq-a67wpk","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:33Z","id":297,"issue_id":"hq-ac8b8q","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:34Z","id":299,"issue_id":"hq-ag5db","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:35Z","id":305,"issue_id":"hq-as05yi","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:36Z","id":308,"issue_id":"hq-awuuw3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:37Z","id":310,"issue_id":"hq-aypi","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:40Z","id":319,"issue_id":"hq-b9v9w5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:40Z","id":321,"issue_id":"hq-bfp38n","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:42Z","id":327,"issue_id":"hq-bodbys","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:43Z","id":331,"issue_id":"hq-bsw70n","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:46Z","id":339,"issue_id":"hq-cah1hh","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:46Z","id":340,"issue_id":"hq-cdsclo","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:46Z","id":342,"issue_id":"hq-ci2dd1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:47Z","id":343,"issue_id":"hq-cmmdaa","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:49Z","id":347,"issue_id":"hq-ctis8c","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:50Z","id":353,"issue_id":"hq-d6p74","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:51Z","id":357,"issue_id":"hq-dfl80j","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:58Z","id":375,"issue_id":"hq-e1c5g0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:58Z","id":376,"issue_id":"hq-e1dmtb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:59Z","id":377,"issue_id":"hq-e24yw3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:19:59Z","id":379,"issue_id":"hq-e5ciz","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:00Z","id":382,"issue_id":"hq-e76757","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:03Z","id":390,"issue_id":"hq-eji0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:05Z","id":396,"issue_id":"hq-ewmbjh","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:06Z","id":398,"issue_id":"hq-f0cw1i","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:08Z","id":402,"issue_id":"hq-f75jb8","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:09Z","id":404,"issue_id":"hq-f7p1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:10Z","id":407,"issue_id":"hq-fhxt3k","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:11Z","id":408,"issue_id":"hq-fioh","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:16Z","id":418,"issue_id":"hq-g6pskq","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:19Z","id":424,"issue_id":"hq-gmg54v","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:19Z","id":426,"issue_id":"hq-gn2qk","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:21Z","id":428,"issue_id":"hq-gu73gs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:22Z","id":431,"issue_id":"hq-gzb0l4","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:23Z","id":432,"issue_id":"hq-h1x84c","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:23Z","id":433,"issue_id":"hq-h27vv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:24Z","id":436,"issue_id":"hq-h4zkqg","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:26Z","id":438,"issue_id":"hq-hbsf","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:27Z","id":440,"issue_id":"hq-heues","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:28Z","id":441,"issue_id":"hq-hg47i7","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:28Z","id":443,"issue_id":"hq-hiuamf","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:28Z","id":444,"issue_id":"hq-hj21bo","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:31Z","id":450,"issue_id":"hq-hru6q","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:33Z","id":455,"issue_id":"hq-i5csfa","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:35Z","id":461,"issue_id":"hq-iafr5w","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:37Z","id":467,"issue_id":"hq-igzbd1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:39Z","id":475,"issue_id":"hq-iums2n","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:41Z","id":481,"issue_id":"hq-j8lhpx","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:44Z","id":486,"issue_id":"hq-jnian","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:45Z","id":488,"issue_id":"hq-josn2g","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:46Z","id":490,"issue_id":"hq-jxis","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:47Z","id":494,"issue_id":"hq-k8m8ze","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:50Z","id":505,"issue_id":"hq-koax","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:51Z","id":509,"issue_id":"hq-ktgms","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:52Z","id":511,"issue_id":"hq-kwbxr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:52Z","id":512,"issue_id":"hq-l00tto","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:52Z","id":513,"issue_id":"hq-l122jv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:53Z","id":518,"issue_id":"hq-l3m8j9","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:54Z","id":519,"issue_id":"hq-l5mebc","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:54Z","id":520,"issue_id":"hq-l6arng","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:54Z","id":521,"issue_id":"hq-l76tbb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:54Z","id":522,"issue_id":"hq-l8gy5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:55Z","id":523,"issue_id":"hq-l9jvy7","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:55Z","id":524,"issue_id":"hq-lcjqyn","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:57Z","id":532,"issue_id":"hq-lo151r","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:58Z","id":535,"issue_id":"hq-lpemq1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:58Z","id":537,"issue_id":"hq-ewmbjh","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:59Z","id":539,"issue_id":"hq-ltg6gl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:20:59Z","id":541,"issue_id":"hq-f0cw1i","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:00Z","id":547,"issue_id":"hq-m0w85i","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:00Z","id":548,"issue_id":"hq-f75jb8","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:01Z","id":550,"issue_id":"hq-m2usd","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:01Z","id":551,"issue_id":"hq-f7p1","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:02Z","id":555,"issue_id":"hq-m8t7x","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:03Z","id":559,"issue_id":"hq-fhxt3k","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:03Z","id":561,"issue_id":"hq-fioh","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:08Z","id":578,"issue_id":"hq-mvme0e","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:08Z","id":579,"issue_id":"hq-g6pskq","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:08Z","id":581,"issue_id":"hq-mxny","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:09Z","id":587,"issue_id":"hq-n11uhe","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:11Z","id":591,"issue_id":"hq-gmg54v","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:11Z","id":594,"issue_id":"hq-gn2qk","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:12Z","id":600,"issue_id":"hq-gu73gs","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:12Z","id":601,"issue_id":"hq-nd3jj5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:13Z","id":605,"issue_id":"hq-ngwy3w","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:13Z","id":606,"issue_id":"hq-gzb0l4","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:13Z","id":607,"issue_id":"hq-nhya32","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:14Z","id":608,"issue_id":"hq-h1x84c","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:14Z","id":609,"issue_id":"hq-h27vv","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:14Z","id":614,"issue_id":"hq-nq8id","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:14Z","id":615,"issue_id":"hq-h4zkqg","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:15Z","id":616,"issue_id":"hq-nr1unz","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:15Z","id":620,"issue_id":"hq-hbsf","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:15Z","id":621,"issue_id":"hq-nu9y5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:16Z","id":625,"issue_id":"hq-heues","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:16Z","id":627,"issue_id":"hq-hg47i7","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:17Z","id":630,"issue_id":"hq-hiuamf","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:17Z","id":631,"issue_id":"hq-hj21bo","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:19Z","id":638,"issue_id":"hq-o7qs6q","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:20Z","id":644,"issue_id":"hq-hru6q","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:21Z","id":648,"issue_id":"hq-ogl8fl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:22Z","id":654,"issue_id":"hq-i5csfa","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:24Z","id":663,"issue_id":"hq-iafr5w","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:25Z","id":670,"issue_id":"hq-oxelr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:26Z","id":671,"issue_id":"hq-oxll4b","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:26Z","id":674,"issue_id":"hq-igzbd1","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:27Z","id":678,"issue_id":"hq-p2qalb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:27Z","id":680,"issue_id":"hq-p5ba7j","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:29Z","id":688,"issue_id":"hq-iums2n","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:32Z","id":699,"issue_id":"hq-j8lhpx","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:32Z","id":700,"issue_id":"hq-pjf0n","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:33Z","id":703,"issue_id":"hq-pkg7li","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:34Z","id":707,"issue_id":"hq-pnna8d","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:35Z","id":709,"issue_id":"hq-po3jip","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:35Z","id":710,"issue_id":"hq-jnian","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:36Z","id":713,"issue_id":"hq-josn2g","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:36Z","id":714,"issue_id":"hq-pprdwg","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:37Z","id":717,"issue_id":"hq-jxis","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:39Z","id":725,"issue_id":"hq-k8m8ze","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:39Z","id":728,"issue_id":"hq-q5fdvs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:40Z","id":730,"issue_id":"hq-q5guge","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:42Z","id":741,"issue_id":"hq-qesm5a","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:42Z","id":742,"issue_id":"hq-koax","text":"Promoted from Level 0: proven value"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:42Z","id":744,"issue_id":"hq-qg5r60","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:43Z","id":750,"issue_id":"hq-ktgms","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:43Z","id":752,"issue_id":"hq-kwbxr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:44Z","id":754,"issue_id":"hq-l00tto","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:44Z","id":755,"issue_id":"hq-qm3xmu","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:44Z","id":756,"issue_id":"hq-l122jv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:45Z","id":764,"issue_id":"hq-qpxvt","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:46Z","id":765,"issue_id":"hq-l3m8j9","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:46Z","id":767,"issue_id":"hq-l5mebc","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:46Z","id":768,"issue_id":"hq-l6arng","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:46Z","id":769,"issue_id":"hq-l76tbb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:46Z","id":770,"issue_id":"hq-quze5s","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:47Z","id":771,"issue_id":"hq-l8gy5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:47Z","id":773,"issue_id":"hq-l9jvy7","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:47Z","id":774,"issue_id":"hq-qx7hl8","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:47Z","id":775,"issue_id":"hq-lcjqyn","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:48Z","id":782,"issue_id":"hq-qy06ft","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:49Z","id":787,"issue_id":"hq-lo151r","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:49Z","id":789,"issue_id":"hq-lpemq1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:50Z","id":792,"issue_id":"hq-ltg6gl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:50Z","id":793,"issue_id":"hq-rdiw","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:52Z","id":799,"issue_id":"hq-m0w85i","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:52Z","id":801,"issue_id":"hq-m2usd","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:52Z","id":804,"issue_id":"hq-rn75u","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:53Z","id":807,"issue_id":"hq-m8t7x","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:53Z","id":808,"issue_id":"hq-ropsvu","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:57Z","id":822,"issue_id":"hq-s0xba1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:58Z","id":826,"issue_id":"hq-s3yhz2","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:58Z","id":827,"issue_id":"hq-mvme0e","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:58Z","id":828,"issue_id":"hq-s406rx","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:21:59Z","id":829,"issue_id":"hq-mxny","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:00Z","id":834,"issue_id":"hq-n11uhe","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:00Z","id":835,"issue_id":"hq-s6995c","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:01Z","id":839,"issue_id":"hq-s9dv4d","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:01Z","id":840,"issue_id":"hq-s9gqbt","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:02Z","id":845,"issue_id":"hq-scjx","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:03Z","id":852,"issue_id":"hq-nd3jj5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:03Z","id":853,"issue_id":"hq-sjcab3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:03Z","id":856,"issue_id":"hq-ngwy3w","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:04Z","id":857,"issue_id":"hq-nhya32","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:05Z","id":863,"issue_id":"hq-nq8id","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:05Z","id":864,"issue_id":"hq-nr1unz","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:06Z","id":867,"issue_id":"hq-syj2qd","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:06Z","id":868,"issue_id":"hq-nu9y5","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:07Z","id":875,"issue_id":"hq-t7g0sb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:07Z","id":877,"issue_id":"hq-t8svrw","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:08Z","id":879,"issue_id":"hq-tcltyb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:08Z","id":881,"issue_id":"hq-td047h","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:08Z","id":883,"issue_id":"hq-td7d9u","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:09Z","id":884,"issue_id":"hq-o7qs6q","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:09Z","id":885,"issue_id":"hq-te02u3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:09Z","id":889,"issue_id":"hq-tfxrct","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:10Z","id":895,"issue_id":"hq-ogl8fl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:11Z","id":896,"issue_id":"hq-tmit","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:13Z","id":905,"issue_id":"hq-tw9utu","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:14Z","id":908,"issue_id":"hq-oxelr","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:14Z","id":909,"issue_id":"hq-oxll4b","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:15Z","id":912,"issue_id":"hq-u3o5r","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:15Z","id":914,"issue_id":"hq-p2qalb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:16Z","id":916,"issue_id":"hq-p5ba7j","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:17Z","id":921,"issue_id":"hq-uc2ko0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:18Z","id":928,"issue_id":"hq-uign2q","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:19Z","id":930,"issue_id":"hq-uljt0w","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:20Z","id":933,"issue_id":"hq-pjf0n","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:20Z","id":935,"issue_id":"hq-up3nlv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:20Z","id":936,"issue_id":"hq-pkg7li","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:21Z","id":939,"issue_id":"hq-pnna8d","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:21Z","id":941,"issue_id":"hq-po3jip","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:21Z","id":942,"issue_id":"hq-urpu7i","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:22Z","id":946,"issue_id":"hq-pprdwg","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:25Z","id":956,"issue_id":"hq-q5fdvs","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:25Z","id":958,"issue_id":"hq-q5guge","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:25Z","id":961,"issue_id":"hq-v8bjw","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:27Z","id":967,"issue_id":"hq-qesm5a","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:27Z","id":969,"issue_id":"hq-qg5r60","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:29Z","id":979,"issue_id":"hq-qm3xmu","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:29Z","id":981,"issue_id":"hq-vljax","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:30Z","id":984,"issue_id":"hq-qpxvt","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:30Z","id":985,"issue_id":"hq-vpr75b","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:30Z","id":987,"issue_id":"hq-vt9dj","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:30Z","id":988,"issue_id":"hq-quze5s","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:31Z","id":992,"issue_id":"hq-qx7hl8","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:32Z","id":999,"issue_id":"hq-qy06ft","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:33Z","id":1009,"issue_id":"hq-rdiw","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:35Z","id":1017,"issue_id":"hq-rn75u","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:35Z","id":1018,"issue_id":"hq-wfrj4z","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:36Z","id":1020,"issue_id":"hq-ropsvu","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:38Z","id":1031,"issue_id":"hq-s0xba1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:38Z","id":1032,"issue_id":"hq-wvs3ag","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:38Z","id":1034,"issue_id":"hq-ww9gs3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:39Z","id":1035,"issue_id":"hq-s3yhz2","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:39Z","id":1037,"issue_id":"hq-s406rx","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:40Z","id":1044,"issue_id":"hq-s6995c","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:40Z","id":1045,"issue_id":"hq-x394o","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:40Z","id":1047,"issue_id":"hq-s9dv4d","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:40Z","id":1049,"issue_id":"hq-s9gqbt","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:41Z","id":1054,"issue_id":"hq-scjx","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:43Z","id":1060,"issue_id":"hq-x98zp3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:43Z","id":1061,"issue_id":"hq-sjcab3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:44Z","id":1067,"issue_id":"hq-xami1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:46Z","id":1070,"issue_id":"hq-syj2qd","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:46Z","id":1073,"issue_id":"hq-xf1hk","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:47Z","id":1077,"issue_id":"hq-t7g0sb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:47Z","id":1079,"issue_id":"hq-t8svrw","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:48Z","id":1082,"issue_id":"hq-tcltyb","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:48Z","id":1084,"issue_id":"hq-td047h","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:48Z","id":1086,"issue_id":"hq-td7d9u","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:48Z","id":1087,"issue_id":"hq-te02u3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:49Z","id":1091,"issue_id":"hq-tfxrct","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:50Z","id":1096,"issue_id":"hq-xoz80l","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:50Z","id":1098,"issue_id":"hq-tmit","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:51Z","id":1104,"issue_id":"hq-xv3oeg","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:52Z","id":1106,"issue_id":"hq-tw9utu","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:52Z","id":1108,"issue_id":"hq-y28hp8","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:53Z","id":1110,"issue_id":"hq-y2ct4x","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:53Z","id":1111,"issue_id":"hq-u3o5r","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:53Z","id":1112,"issue_id":"hq-y85k4l","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:54Z","id":1116,"issue_id":"hq-yh59","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:54Z","id":1119,"issue_id":"hq-uc2ko0","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:55Z","id":1125,"issue_id":"hq-uign2q","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:56Z","id":1126,"issue_id":"hq-uljt0w","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:56Z","id":1127,"issue_id":"hq-yph6um","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:57Z","id":1131,"issue_id":"hq-up3nlv","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:57Z","id":1134,"issue_id":"hq-yucsl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:58Z","id":1137,"issue_id":"hq-urpu7i","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:22:58Z","id":1138,"issue_id":"hq-yxkrt","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:02Z","id":1151,"issue_id":"hq-v8bjw","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:04Z","id":1160,"issue_id":"hq-zvfxh","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:04Z","id":1164,"issue_id":"hq-zyxd3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:05Z","id":1172,"issue_id":"hq-vljax","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:06Z","id":1175,"issue_id":"hq-vpr75b","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:06Z","id":1176,"issue_id":"hq-vt9dj","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:11Z","id":1191,"issue_id":"hq-wfrj4z","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:13Z","id":1197,"issue_id":"hq-wvs3ag","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:13Z","id":1198,"issue_id":"hq-ww9gs3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:15Z","id":1204,"issue_id":"hq-x394o","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:16Z","id":1210,"issue_id":"hq-x98zp3","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:17Z","id":1213,"issue_id":"hq-xami1","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:18Z","id":1216,"issue_id":"hq-xf1hk","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:21Z","id":1227,"issue_id":"hq-xoz80l","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:22Z","id":1231,"issue_id":"hq-xv3oeg","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:23Z","id":1234,"issue_id":"hq-y28hp8","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:24Z","id":1235,"issue_id":"hq-y2ct4x","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:24Z","id":1236,"issue_id":"hq-y85k4l","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:25Z","id":1237,"issue_id":"hq-yh59","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:26Z","id":1243,"issue_id":"hq-yph6um","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:28Z","id":1247,"issue_id":"hq-yucsl","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:28Z","id":1249,"issue_id":"hq-yxkrt","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:32Z","id":1258,"issue_id":"hq-zvfxh","text":"Promoted from Level 0: open past TTL"}
+{"author":"l0g1x","created_at":"2026-02-22T07:23:33Z","id":1259,"issue_id":"hq-zyxd3","text":"Promoted from Level 0: open past TTL"}
+{"author":"deacon","created_at":"2026-02-28T02:12:07Z","id":1260,"issue_id":"hq-wisp-ghknh","text":"Promoted from Level 0: open past TTL"}
+{"author":"deacon","created_at":"2026-02-28T02:12:08Z","id":1261,"issue_id":"hq-wisp-m177y","text":"Promoted from Level 0: open past TTL"}
+{"author":"deacon","created_at":"2026-02-28T02:14:01Z","id":1262,"issue_id":"hq-wisp-9t1rj","text":"Promoted from Level 0: open past TTL"}
+{"author":"deacon","created_at":"2026-02-28T02:12:01Z","id":1267,"issue_id":"hq-y8i8nz","text":"Promoted from Level 0: open past TTL"}
