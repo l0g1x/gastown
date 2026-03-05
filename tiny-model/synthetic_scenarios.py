@@ -48,22 +48,29 @@ def make_idle_patrol():
 
 
 def make_healthy_polecat():
-    """Active healthy polecat → gt_peek or gt_session_status"""
+    """Active healthy polecat → gt_peek or gt_session_status (NOT nudge)"""
     rig = random.choice(RIGS)
     polecat = random.choice(POLECATS)
     wisp = random.choice(WISPS)
     bead = random.choice(BEADS)
+    recent_mins = random.choice([1, 2, 3, 5])
     templates = [
-        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}",
+        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n\nWorking on {bead}. Last activity: {recent_mins} minutes ago. Making progress.",
+        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n  ○ {rig}/{random.choice(POLECATS)}  done\n    {random.choice(WISPS)}\n\nActive output detected. {polecat} is healthy.",
+        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n\nLast commit: {recent_mins}min ago. Context usage: 34%. Healthy.",
+        f"Polecat status:\n  {rig}/{polecat}: active (working on {bead})\n  Session: {wisp}\n  Last activity: {recent_mins}m ago, producing output normally.",
+        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n\n{polecat} is actively working on {bead}. Recent output visible. No issues.",
+        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n\nHealthy. Making progress on {bead}. {recent_mins}min since last activity.",
+        # Bare status — no negative signal means healthy (DO NOT nudge)
         f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n  ○ {rig}/{random.choice(POLECATS)}  done\n    {random.choice(WISPS)}",
-        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}\n\nWorking on {bead}. Last activity: 2 minutes ago.",
-        f"Polecat status:\n  {rig}/{polecat}: active (working on {bead})\n  Session: {wisp}",
+        f"Polecats\n\n  ● {rig}/{polecat}  working\n    {wisp}",
     ]
     tools = [
         {"tool": "gt_peek", "args": {"target": f"{rig}/{polecat}", "lines": 30}},
-        {"tool": "gt_session_status", "args": {"session": wisp}},
         {"tool": "gt_peek", "args": {"target": f"{rig}/{polecat}"}},
+        {"tool": "gt_session_status", "args": {"session": wisp}},
         {"tool": "gt_polecat_list", "args": {"rig": rig}},
+        {"tool": "gt_patrol_report", "args": {"status": "active", "note": f"{polecat} healthy and working on {bead}."}},
     ]
     return random.choice(templates), random.choice(tools)
 
@@ -193,7 +200,7 @@ def make_mail_check():
 
 SCENARIO_GENERATORS = [
     (make_idle_patrol, 1.0),
-    (make_healthy_polecat, 1.5),
+    (make_healthy_polecat, 3.0),    # upweight — must distinguish from stuck
     (make_stuck_polecat, 2.0),      # upweight rare but important
     (make_completed_polecat, 2.0),   # upweight
     (make_crash_loop, 2.5),          # upweight — hardest scenario

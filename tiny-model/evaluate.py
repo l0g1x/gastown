@@ -46,7 +46,7 @@ SCENARIOS = [
     {
         "name": "healthy_polecat",
         "messages": [
-            {"role": "user", "content": "Polecats\n\n  ● gastown/furiosa  working\n    hq-wisp-2v214\n  ○ gastown/nux  done\n    gt-kvo.6"},
+            {"role": "user", "content": "Polecats\n\n  ● gastown/furiosa  working\n    hq-wisp-2v214\n  ○ gastown/nux  done\n    gt-kvo.6\n\nLast activity: 2 minutes ago. Making progress on bcc-8rlwh. Healthy."},
         ],
         "expected_tools": {"gt_peek", "gt_session_status", "gt_polecat_list", "gt_patrol_report"},
         "description": "Active polecat → should peek or check status",
