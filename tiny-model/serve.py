@@ -321,8 +321,8 @@ def patrol_loop(model, tokenizer, *, shadow: bool = False,
 
             if fixed_interval:
                 interval = fixed_interval
-            elif tool != "none":
-                interval = BACKOFF_MIN  # reset on action
+            elif tool != "none" and not shadow:
+                interval = BACKOFF_MIN  # reset on real action only
             else:
                 interval = min(interval * 2, BACKOFF_MAX)  # exponential backoff
 

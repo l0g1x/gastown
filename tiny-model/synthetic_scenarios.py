@@ -32,17 +32,29 @@ BRANCHES = ["feature/fix-auth", "feature/add-tests", "integration/beads-ide", "f
 
 def make_idle_patrol():
     """Idle patrol → gt_patrol_report or none"""
+    rig = random.choice(RIGS)
+    crew = random.choice(["crew/zfc", "crew/bcc", "crew/hq"])
+    n_old = random.choice([0, 1, 3, 5])
     templates = [
         "Polecats\n\nNo active polecats.",
         "Polecats\n\nNo polecats running.\n\nAll sessions idle.",
-        f"Polecats\n\nNo active polecats.\n\nDeacon: alive\nRefinery: running\n{random.choice(RIGS)} rig quiet.",
+        f"Polecats\n\nNo active polecats.\n\nDeacon: alive\nRefinery: running\n{rig} rig quiet.",
         "Patrol check: no polecats active, infrastructure healthy.",
-        f"Polecats\n\n(none active)\n\nInbox: 0 unread\n{random.choice(RIGS)} rig idle.",
+        f"Polecats\n\n(none active)\n\nInbox: 0 unread\n{rig} rig idle.",
+        # Real CLI output formats from gt polecat list + gt mail inbox
+        "Polecats\n\nNo polecats found.",
+        f"Polecats\n\nNo polecats found.\n\nInbox\n\n📬 Inbox: gastown/{crew} (0 messages, 0 unread)\n  (no messages)",
+        f"Polecats\n\nNo polecats found.\n\nInbox\n\n📬 Inbox: gastown/{crew} ({n_old} messages, 0 unread)\n  (no messages)",
+        f"Polecats\n\nNo polecats found.\n\nInbox\n\n📬 Inbox: gastown/{crew} (1 messages, 0 unread)\n  (no messages)",
+        # Variations with infrastructure healthy
+        f"Polecats\n\nNo polecats found.\n\nInbox\n\n📬 Inbox: gastown/{crew} (0 messages, 0 unread)\n  (no messages)\n\nDeacon: alive\nRefinery: running",
     ]
     tools = [
         {"tool": "gt_patrol_report", "args": {"status": "idle", "note": "No active polecats. Rig quiet."}},
-        {"tool": "none", "args": {}, "note": "No polecats active. Infrastructure healthy."},
+        {"tool": "none", "args": {}},
         {"tool": "gt_patrol_report", "args": {"status": "idle"}},
+        {"tool": "none", "args": {}},
+        {"tool": "none", "args": {}},
     ]
     return random.choice(templates), random.choice(tools)
 
@@ -199,7 +211,7 @@ def make_mail_check():
 
 
 SCENARIO_GENERATORS = [
-    (make_idle_patrol, 1.0),
+    (make_idle_patrol, 3.0),          # upweight — must learn "quiet rig → none"
     (make_healthy_polecat, 3.0),    # upweight — must distinguish from stuck
     (make_stuck_polecat, 2.0),      # upweight rare but important
     (make_completed_polecat, 2.0),   # upweight
