@@ -175,6 +175,25 @@ Dolt commit. As a patrol agent running frequently, your impact is amplified.
 
 See `docs/dolt-health-guide.md` for the full Dolt health protocol.
 
+## Session End Protocol
+
+When context fills and you need to hand off to a fresh session:
+
+```bash
+gt handoff --auto   # Save state to state.json (NO mail bead created)
+# Then exit — daemon restarts you automatically
+```
+
+**NEVER use `gt handoff` (without --auto) for routine session cycling.**
+`gt handoff` creates a permanent mail bead every cycle. These accumulate
+indefinitely — the witness inbox has been cleaned of 290+ stale HANDOFF
+mails twice already (2026-03-05: 119 mails, 2026-03-08: 171 mails).
+
+state.json already stores `patrol_count`, `rig_state`, and `last_incident`.
+`gt prime` reads this on startup. No mail needed.
+
+---
+
 ## Do NOT
 
 - **Close wisps you didn't create** — wisp lifecycle is the reaper Dog's job
@@ -185,3 +204,4 @@ See `docs/dolt-health-guide.md` for the full Dolt health protocol.
 - Spawn new polecats (Mayor does that)
 - Modify code directly (you're a monitor, not a worker)
 - Escalate without attempting nudges first
+- **Use `gt handoff` (without --auto) for session cycling** — creates mail spam

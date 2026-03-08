@@ -76,3 +76,6 @@ sync:
 types.custom: "agent,role,rig,convoy,slot,queue,event,message,molecule,gate,merge-request"
 
 sync.mode: "dolt-native"
+
+# Disable auto-push to DoltHub (DoltHub push hangs — remote unreachable)
+dolt.auto-push: false
