@@ -15,6 +15,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import re
 import shlex
 import subprocess
@@ -23,6 +24,8 @@ import time
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+
+from snapshot_format import format_snapshot
 
 SYSTEM_PROMPT = """You are a Witness agent. You respond ONLY with JSON tool calls.
 
@@ -141,7 +144,7 @@ def run_cmd(cmd: str, timeout: int = 15) -> str:
 
 
 def gather_patrol_context() -> str:
-    """Gather patrol context via gt CLI commands."""
+    """Gather patrol context via gt CLI commands (legacy 2-command version)."""
     polecats = run_cmd("gt polecat list --all")
     inbox = run_cmd("gt mail inbox --unread")
 
@@ -149,6 +152,114 @@ def gather_patrol_context() -> str:
     if inbox and inbox != "[error] command timed out":
         parts += ["", "Inbox", "", inbox]
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# State persistence
+# ---------------------------------------------------------------------------
+
+STATE_FILE = os.path.expanduser("~/.claude/witness_state.json")
+
+
+def load_state() -> dict:
+    """Load persistent patrol state from disk."""
+    try:
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"patrol_count": 0, "idle_cycles": 0, "last_action": "none"}
+
+
+def save_state(state: dict, decision: dict) -> None:
+    """Update and persist patrol state after a decision."""
+    state["patrol_count"] += 1
+    if decision.get("tool", "none") != "none":
+        state["idle_cycles"] = 0
+    else:
+        state["idle_cycles"] += 1
+    state["last_action"] = decision.get("tool", "none")
+    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
+# ---------------------------------------------------------------------------
+# Rich context gathering (10 commands → structured snapshot)
+# ---------------------------------------------------------------------------
+
+def gather_patrol_context_rich(rig: str) -> str:
+    """Gather rich patrol context via 10 gt CLI commands."""
+    timeout = 10
+
+    # 1. Polecat status
+    polecats = run_cmd(f"gt polecat list {shlex.quote(rig)}", timeout=timeout)
+
+    # 2. Inbox summary
+    inbox = run_cmd("gt mail inbox --unread", timeout=timeout)
+
+    # 3. Read unread messages (max 3)
+    inbox_detail = ""
+    if inbox and "[error]" not in inbox:
+        # Extract mail IDs from inbox output (lines with IDs like hq-xxx)
+        mail_ids = re.findall(r'\b([a-z]+-[a-z0-9]{4,})\b', inbox)
+        for mid in mail_ids[:3]:
+            msg = run_cmd(f"gt mail read {shlex.quote(mid)}", timeout=timeout)
+            if msg and "[error]" not in msg:
+                inbox_detail += f"\n--- {mid} ---\n{msg[:200]}"
+
+    inbox_full = inbox or "No unread messages."
+    if inbox_detail:
+        inbox_full += inbox_detail
+
+    # 4. Cleanup wisps
+    cleanup = run_cmd("bd list --label=cleanup --status=open", timeout=timeout)
+
+    # 5. Refinery status
+    refinery = run_cmd(
+        f"gt session status {shlex.quote(rig)}/refinery", timeout=timeout
+    )
+
+    # 6. Deacon health
+    deacon = run_cmd("tmux has-session -t hq-deacon 2>/dev/null && echo alive || echo dead",
+                     timeout=timeout)
+
+    # 7. Active beads
+    active_beads = run_cmd("bd list --status=in_progress", timeout=timeout)
+
+    # 8. Timer gates
+    timer_gates = run_cmd("bd gate check --type=timer", timeout=timeout)
+
+    # Build infrastructure summary
+    deacon_status = "alive" if deacon and "alive" in deacon else "dead"
+    refinery_status = refinery if refinery and "[error]" not in refinery else "unknown"
+    infra = f"Deacon: {deacon_status}\nRefinery: {refinery_status}"
+
+    # Build active work summary
+    active_parts = []
+    if active_beads and active_beads != "[error] command timed out":
+        active_parts.append(active_beads)
+    if timer_gates and timer_gates != "[error] command timed out":
+        active_parts.append(f"Timer gates: {timer_gates}")
+    active_work = "\n".join(active_parts) if active_parts else "None"
+
+    # State
+    state = load_state()
+    state_str = (
+        f"patrol_count: {state['patrol_count']}, "
+        f"idle_cycles: {state['idle_cycles']}, "
+        f"last_action: {state['last_action']}"
+    )
+
+    sections = {
+        "Polecats": polecats or "No active polecats.",
+        "Inbox": inbox_full,
+        "Cleanup Wisps": cleanup if cleanup and "[error]" not in cleanup else "None",
+        "Infrastructure": infra,
+        "Active Work": active_work,
+        "State": state_str,
+    }
+
+    return format_snapshot(sections)
 
 
 # ---------------------------------------------------------------------------
@@ -285,13 +396,15 @@ def _build_command(tool: str, args: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 def patrol_loop(model, tokenizer, *, shadow: bool = False,
-                once: bool = False, fixed_interval: int | None = None):
+                once: bool = False, fixed_interval: int | None = None,
+                rig: str | None = None):
     """Run the patrol loop with exponential backoff."""
     interval = fixed_interval or BACKOFF_MIN
     cycle = 0
+    use_rich = rig is not None
 
-    log.info("Starting patrol loop (shadow=%s, once=%s, interval=%s)",
-             shadow, once, fixed_interval or "adaptive")
+    log.info("Starting patrol loop (shadow=%s, once=%s, interval=%s, rig=%s, rich=%s)",
+             shadow, once, fixed_interval or "adaptive", rig, use_rich)
 
     try:
         while True:
@@ -299,7 +412,10 @@ def patrol_loop(model, tokenizer, *, shadow: bool = False,
             ts = time.strftime("%H:%M:%S")
 
             # 1. Gather context
-            context = gather_patrol_context()
+            if use_rich:
+                context = gather_patrol_context_rich(rig)
+            else:
+                context = gather_patrol_context()
             ctx_summary = context[:120].replace("\n", " ")
             log.info("[%s] cycle=%d context=%s", ts, cycle, ctx_summary)
 
@@ -314,7 +430,12 @@ def patrol_loop(model, tokenizer, *, shadow: bool = False,
             if result:
                 log.info("[%s] result: %s", ts, result[:200])
 
-            # 4. Backoff
+            # 4. Update state (rich mode only)
+            if use_rich:
+                state = load_state()
+                save_state(state, decision)
+
+            # 5. Backoff
             if once:
                 log.info("Single cycle complete, exiting.")
                 break
@@ -343,6 +464,8 @@ def main():
     )
     parser.add_argument("--checkpoint", required=True,
                         help="Path to fine-tuned model checkpoint")
+    parser.add_argument("--rig", type=str, default=None,
+                        help="Rig name for rich context gathering (enables 10-command snapshot)")
     parser.add_argument("--shadow", action="store_true",
                         help="Shadow mode: log decisions but do not execute")
     parser.add_argument("--once", action="store_true",
@@ -361,7 +484,7 @@ def main():
 
     model, tokenizer = load_model(args.checkpoint)
     patrol_loop(model, tokenizer, shadow=args.shadow,
-                once=args.once, fixed_interval=args.interval)
+                once=args.once, fixed_interval=args.interval, rig=args.rig)
 
 
 if __name__ == "__main__":

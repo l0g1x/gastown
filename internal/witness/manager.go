@@ -84,6 +84,50 @@ func (m *Manager) Status() (*tmux.SessionInfo, error) {
 	return t.GetSessionInfo(sessionID)
 }
 
+// ReadMode returns the witness patrol mode for this rig ("claude" or "tiny").
+func (m *Manager) ReadMode() string {
+	modeFile := filepath.Join(m.rig.Path, "witness", ".witness-mode")
+	data, err := os.ReadFile(modeFile)
+	if err != nil {
+		return "claude"
+	}
+	mode := strings.TrimSpace(string(data))
+	if mode == "tiny" {
+		return "tiny"
+	}
+	return "claude"
+}
+
+// WriteMode sets the witness patrol mode ("claude" or "tiny").
+func (m *Manager) WriteMode(mode string) error {
+	witnessDir := filepath.Join(m.rig.Path, "witness")
+	os.MkdirAll(witnessDir, 0o755)
+	return os.WriteFile(filepath.Join(witnessDir, ".witness-mode"), []byte(mode+"\n"), 0o644)
+}
+
+// ReadShadow returns whether shadow mode is enabled for the tiny witness.
+// Shadow mode logs decisions without executing them.
+func (m *Manager) ReadShadow() bool {
+	shadowFile := filepath.Join(m.rig.Path, "witness", ".witness-shadow")
+	_, err := os.Stat(shadowFile)
+	return err == nil
+}
+
+// WriteShadow enables or disables shadow mode for the tiny witness.
+func (m *Manager) WriteShadow(enabled bool) error {
+	witnessDir := filepath.Join(m.rig.Path, "witness")
+	os.MkdirAll(witnessDir, 0o755)
+	shadowFile := filepath.Join(witnessDir, ".witness-shadow")
+	if enabled {
+		return os.WriteFile(shadowFile, []byte("shadow\n"), 0o644)
+	}
+	err := os.Remove(shadowFile)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
 // witnessDir returns the working directory for the witness.
 // Prefers witness/rig/, falls back to witness/, then rig root.
 func (m *Manager) witnessDir() string {
@@ -179,7 +223,9 @@ func (m *Manager) Start(foreground bool, agentOverride string, envOverrides []st
 	// NOTE: No gt prime injection needed - SessionStart hook handles it automatically
 	// Export GT_ROLE and BD_ACTOR in the command since tmux SetEnvironment only affects new panes
 	// Pass m.rig.Path so rig agent settings are honored (not town-level defaults)
-	command, err := buildWitnessStartCommand(m.rig.Path, m.rig.Name, townRoot, sessionID, agentOverride, roleConfig)
+	mode := m.ReadMode()
+	shadow := m.ReadShadow()
+	command, err := buildWitnessStartCommand(m.rig.Path, m.rig.Name, townRoot, sessionID, agentOverride, roleConfig, mode, shadow)
 	if err != nil {
 		return err
 	}
@@ -222,16 +268,24 @@ func (m *Manager) Start(foreground bool, agentOverride string, envOverrides []st
 	theme := tmux.AssignTheme(m.rig.Name)
 	_ = t.ConfigureGasTownSession(sessionID, theme, m.rig.Name, "witness", "witness")
 
-	// Wait for Claude to start - fatal if Claude fails to launch
-	if err := t.WaitForCommand(sessionID, constants.SupportedShells, constants.ClaudeStartTimeout); err != nil {
-		// Kill the zombie session before returning error
-		_ = t.KillSessionWithProcesses(sessionID)
-		return fmt.Errorf("waiting for witness to start: %w", err)
-	}
+	if mode == "tiny" {
+		// Tiny model: serve.py is a plain Python process, not Claude Code.
+		// Set GT_PROCESS_NAMES so IsAgentAlive detects the python process.
+		_ = t.SetEnvironment(sessionID, "GT_PROCESS_NAMES", "python,python3")
+		// Give serve.py time to start loading the model.
+		time.Sleep(2 * time.Second)
+	} else {
+		// Wait for Claude to start - fatal if Claude fails to launch
+		if err := t.WaitForCommand(sessionID, constants.SupportedShells, constants.ClaudeStartTimeout); err != nil {
+			// Kill the zombie session before returning error
+			_ = t.KillSessionWithProcesses(sessionID)
+			return fmt.Errorf("waiting for witness to start: %w", err)
+		}
 
-	// Accept startup dialogs (workspace trust + bypass permissions) if they appear.
-	if err := t.AcceptStartupDialogs(sessionID); err != nil {
-		log.Printf("warning: accepting startup dialogs for %s: %v", sessionID, err)
+		// Accept startup dialogs (workspace trust + bypass permissions) if they appear.
+		if err := t.AcceptStartupDialogs(sessionID); err != nil {
+			log.Printf("warning: accepting startup dialogs for %s: %v", sessionID, err)
+		}
 	}
 
 	// Track PID for defense-in-depth orphan cleanup (non-fatal)
@@ -247,7 +301,11 @@ func (m *Manager) Start(foreground bool, agentOverride string, envOverrides []st
 	}
 
 	// Record the agent instantiation event (GASTA root span).
-	session.RecordAgentInstantiateFromDir(context.Background(), runID, runtimeConfig.ResolvedAgent,
+	agentName := runtimeConfig.ResolvedAgent
+	if mode == "tiny" {
+		agentName = "smollm2-135m"
+	}
+	session.RecordAgentInstantiateFromDir(context.Background(), runID, agentName,
 		"witness", "witness", sessionID, m.rig.Name, townRoot, "", witnessDir)
 
 	time.Sleep(constants.ShutdownNotifyDelay)
@@ -285,7 +343,21 @@ func roleConfigEnvVars(roleConfig *beads.RoleConfig, townRoot, rigName string) m
 	return expanded
 }
 
-func buildWitnessStartCommand(rigPath, rigName, townRoot, sessionName, agentOverride string, roleConfig *beads.RoleConfig) (string, error) {
+func buildWitnessStartCommand(rigPath, rigName, townRoot, sessionName, agentOverride string, roleConfig *beads.RoleConfig, mode string, shadow bool) (string, error) {
+	if mode == "tiny" {
+		tinyModelDir := filepath.Join(townRoot, "gastown", "crew", "zfc", "tiny-model")
+		python := filepath.Join(tinyModelDir, ".venv", "bin", "python")
+		script := filepath.Join(tinyModelDir, "serve.py")
+		checkpoint := filepath.Join(tinyModelDir, "checkpoints",
+			"smollm2-135m_snapshots_v1",
+			"smollm2-135m_fmtb_full_ep3", "final")
+		cmd := fmt.Sprintf("exec %s %s --checkpoint %s --rig %s",
+			python, script, checkpoint, rigName)
+		if shadow {
+			cmd += " --shadow"
+		}
+		return cmd, nil
+	}
 	if agentOverride != "" {
 		roleConfig = nil
 	}

@@ -104,6 +104,45 @@ Examples:
 	RunE: runWitnessAttach,
 }
 
+var witnessModeCmd = &cobra.Command{
+	Use:   "mode <rig> [tiny|claude]",
+	Short: "Get or set witness patrol mode",
+	Long: `Switch the witness between Claude Code and tiny model patrol.
+
+With no mode argument, shows the current mode.
+With a mode argument, sets the mode and restarts the witness.
+
+Modes:
+  claude  - Default Claude Code agent (mol-witness-patrol molecule)
+  tiny    - Fine-tuned SmolLM2-135M model (serve.py patrol loop)
+
+Examples:
+  gt witness mode gastown          # show current mode
+  gt witness mode gastown tiny     # switch to tiny model
+  gt witness mode gastown claude   # switch back to Claude`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: runWitnessMode,
+}
+
+var witnessShadowCmd = &cobra.Command{
+	Use:   "shadow <rig> [on|off]",
+	Short: "Get or set shadow mode for tiny witness",
+	Long: `Control shadow mode for the tiny model witness.
+
+When shadow mode is on, the tiny model logs decisions but does NOT execute them.
+Use this to safely observe the model's behavior before going live.
+
+With no argument, shows current shadow state.
+With on/off, sets shadow mode and restarts the witness.
+
+Examples:
+  gt witness shadow gastown          # show current state
+  gt witness shadow gastown on       # enable shadow mode
+  gt witness shadow gastown off      # disable (go live)`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: runWitnessShadow,
+}
+
 var witnessRestartCmd = &cobra.Command{
 	Use:   "restart <rig>",
 	Short: "Restart the witness",
@@ -138,6 +177,8 @@ func init() {
 	witnessCmd.AddCommand(witnessRestartCmd)
 	witnessCmd.AddCommand(witnessStatusCmd)
 	witnessCmd.AddCommand(witnessAttachCmd)
+	witnessCmd.AddCommand(witnessModeCmd)
+	witnessCmd.AddCommand(witnessShadowCmd)
 
 	rootCmd.AddCommand(witnessCmd)
 }
@@ -329,6 +370,130 @@ func runWitnessAttach(cmd *cobra.Command, args []string) error {
 
 	// Attach to the session (socket-aware: uses the town's tmux socket).
 	return attachToTmuxSession(sessionName)
+}
+
+func runWitnessMode(cmd *cobra.Command, args []string) error {
+	rigName := args[0]
+
+	mgr, err := getWitnessManager(rigName)
+	if err != nil {
+		return err
+	}
+
+	// Query mode
+	if len(args) == 1 {
+		mode := mgr.ReadMode()
+		fmt.Printf("Witness mode for %s: %s\n", rigName, style.Bold.Render(mode))
+		return nil
+	}
+
+	// Set mode
+	mode := args[1]
+	if mode != "tiny" && mode != "claude" {
+		return fmt.Errorf("invalid mode %q: must be 'tiny' or 'claude'", mode)
+	}
+
+	current := mgr.ReadMode()
+	if mode == current {
+		fmt.Printf("Witness mode for %s is already %s\n", rigName, style.Bold.Render(mode))
+		return nil
+	}
+
+	if err := mgr.WriteMode(mode); err != nil {
+		return fmt.Errorf("writing mode file: %w", err)
+	}
+
+	// Stop existing witness (non-fatal: may not be running)
+	t := tmux.NewTmux()
+	sessionName := witnessSessionName(rigName)
+	if running, _ := t.HasSession(sessionName); running {
+		fmt.Printf("Stopping current witness (%s)...\n", current)
+		if err := t.KillSessionWithProcesses(sessionName); err != nil {
+			style.PrintWarning("failed to kill session: %v", err)
+		}
+		_ = mgr.Stop()
+	}
+
+	// Start witness in new mode
+	fmt.Printf("Starting witness in %s mode...\n", mode)
+	if err := mgr.Start(false, witnessAgentOverride, witnessEnvOverrides); err != nil {
+		return fmt.Errorf("starting witness: %w", err)
+	}
+
+	fmt.Printf("%s Witness switched to %s mode for %s\n", style.Bold.Render("✓"), style.Bold.Render(mode), rigName)
+	fmt.Printf("  %s\n", style.Dim.Render("Use 'gt witness attach' to connect"))
+	return nil
+}
+
+func runWitnessShadow(cmd *cobra.Command, args []string) error {
+	rigName := args[0]
+
+	mgr, err := getWitnessManager(rigName)
+	if err != nil {
+		return err
+	}
+
+	// Query state
+	if len(args) == 1 {
+		shadow := mgr.ReadShadow()
+		if shadow {
+			fmt.Printf("Shadow mode for %s: %s\n", rigName, style.Bold.Render("on"))
+		} else {
+			fmt.Printf("Shadow mode for %s: %s\n", rigName, style.Bold.Render("off"))
+		}
+		return nil
+	}
+
+	// Set state
+	val := args[1]
+	var enable bool
+	switch val {
+	case "on", "true", "1":
+		enable = true
+	case "off", "false", "0":
+		enable = false
+	default:
+		return fmt.Errorf("invalid value %q: must be 'on' or 'off'", val)
+	}
+
+	current := mgr.ReadShadow()
+	if enable == current {
+		state := "off"
+		if enable {
+			state = "on"
+		}
+		fmt.Printf("Shadow mode for %s is already %s\n", rigName, style.Bold.Render(state))
+		return nil
+	}
+
+	if err := mgr.WriteShadow(enable); err != nil {
+		return fmt.Errorf("writing shadow state: %w", err)
+	}
+
+	// Restart witness if running in tiny mode (shadow only affects tiny)
+	if mgr.ReadMode() == "tiny" {
+		t := tmux.NewTmux()
+		sessionName := witnessSessionName(rigName)
+		if running, _ := t.HasSession(sessionName); running {
+			state := "off"
+			if enable {
+				state = "on"
+			}
+			fmt.Printf("Restarting witness with shadow=%s...\n", state)
+			_ = t.KillSessionWithProcesses(sessionName)
+			_ = mgr.Stop()
+			if err := mgr.Start(false, "", nil); err != nil {
+				return fmt.Errorf("restarting witness: %w", err)
+			}
+		}
+	}
+
+	state := "off (live)"
+	if enable {
+		state = "on (log only)"
+	}
+	fmt.Printf("%s Shadow mode set to %s for %s\n", style.Bold.Render("✓"), style.Bold.Render(state), rigName)
+	return nil
 }
 
 func runWitnessRestart(cmd *cobra.Command, args []string) error {

@@ -22,6 +22,7 @@ import torch
 from pathlib import Path
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from snapshot_format import format_snapshot
 
 
 VALID_TOOLS = {
@@ -33,8 +34,11 @@ VALID_TOOLS = {
     "bash", "none",
 }
 
-# Scenario-based test cases with expected tool categories
-SCENARIOS = [
+# ---------------------------------------------------------------------------
+# Legacy scenarios (original 8, flat format)
+# ---------------------------------------------------------------------------
+
+SCENARIOS_LEGACY = [
     {
         "name": "idle_patrol",
         "messages": [
@@ -100,6 +104,199 @@ SCENARIOS = [
         "description": "Mail check → should check inbox",
     },
 ]
+
+
+def _snap(**sections) -> str:
+    """Helper to build rich snapshot for eval scenarios."""
+    defaults = {
+        "Polecats": "No polecats found.",
+        "Inbox": "No unread messages.",
+        "Cleanup Wisps": "None",
+        "Infrastructure": "Deacon: alive\nRefinery: running",
+        "Active Work": "None",
+        "State": "patrol_count: 12, idle_cycles: 2, last_action: none",
+    }
+    defaults.update(sections)
+    return format_snapshot(defaults)
+
+
+# ---------------------------------------------------------------------------
+# Rich-snapshot scenarios (all 16: original 8 rewritten + 8 new)
+# ---------------------------------------------------------------------------
+
+SCENARIOS_RICH = [
+    # --- Original 8, rewritten in snapshot format ---
+    {
+        "name": "idle_patrol",
+        "messages": [
+            {"role": "user", "content": _snap()},
+        ],
+        "expected_tools": {"gt_patrol_report", "none"},
+        "description": "No polecats active, everything healthy → idle or report",
+    },
+    {
+        "name": "healthy_polecat",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ● gastown/furiosa  working\n    hq-wisp-2v214\n\nLast activity: 2 minutes ago. Making progress on bcc-8rlwh.",
+                **{"Active Work": "bcc-8rlwh (in_progress, assigned to gastown/furiosa)"},
+            )},
+        ],
+        "expected_tools": {"gt_peek", "gt_session_status", "gt_polecat_list", "gt_patrol_report", "none"},
+        "description": "Active healthy polecat → peek, monitor, or do nothing",
+    },
+    {
+        "name": "stuck_polecat",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ● gastown/furiosa  working\n    hq-wisp-2v214\n\nLast activity: 45 minutes ago. No progress detected.",
+                **{"Active Work": "bcc-8rlwh (in_progress, assigned to gastown/furiosa)"},
+            )},
+        ],
+        "expected_tools": {"gt_nudge", "gt_peek"},
+        "description": "Stuck polecat 45min → should nudge",
+    },
+    {
+        "name": "completed_polecat",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ○ gastown/furiosa  done\n    hq-wisp-2v214\n\nAll work pushed. Branch merged.",
+            )},
+        ],
+        "expected_tools": {"gt_polecat_nuke", "check_git_state", "gt_mail_send", "bd_close", "gt_escalate", "gt_patrol_report"},
+        "description": "Completed polecat, clean git → nuke, close bead, verify git, or report",
+    },
+    {
+        "name": "crash_loop",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ✗ gastown/furiosa  crashed\n    hq-wisp-2v214\n\nRestart count: 4. Last crash: segfault.",
+            )},
+        ],
+        "expected_tools": {"gt_escalate", "gt_polecat_nuke", "gt_mail_send"},
+        "description": "Crash-looping polecat → escalate or force nuke",
+    },
+    {
+        "name": "unpushed_work",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ○ gastown/furiosa  done\n    hq-wisp-2v214\n\nGit state: 3 unpushed commits on branch feature/fix-auth.",
+            )},
+        ],
+        "expected_tools": {"gt_escalate", "gt_mail_send", "check_git_state"},
+        "description": "Completed but unpushed work → escalate, NOT nuke",
+    },
+    {
+        "name": "check_infrastructure",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Infrastructure="Deacon: dead\nRefinery: running",
+            )},
+        ],
+        "expected_tools": {"gt_mail_send", "gt_escalate"},
+        "description": "Deacon down (refinery ok) → should escalate",
+    },
+    {
+        "name": "idle_with_mail",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Inbox="2 unread\n  hq-m5t2w  from:hq/mayor  Routine check-in\n--- hq-m5t2w ---\nRoutine status check. How is your rig?",
+            )},
+        ],
+        "expected_tools": {"gt_mail_send", "gt_patrol_report", "none"},
+        "description": "Idle rig with routine mail → respond or report idle",
+    },
+    # --- New 8 scenarios ---
+    {
+        "name": "polecat_done_inbox",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ○ gastown/furiosa  done\n    hq-wisp-2v214",
+                Inbox="1 unread\n  hq-m3k9x  from:gastown/furiosa  POLECAT_DONE\n--- hq-m3k9x ---\nAll work on bcc-8rlwh complete. Branch feature/fix-auth pushed. Git clean.",
+                **{"Active Work": "bcc-8rlwh (in_progress)"},
+            )},
+        ],
+        "expected_tools": {"gt_mail_send"},
+        "description": "POLECAT_DONE in inbox → send MERGE_READY to refinery",
+    },
+    {
+        "name": "lifecycle_shutdown",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ● gastown/nux  working\n    bcc-wisp-x8k3m",
+                Inbox="1 unread\n  gt-m1r4v  from:system  LIFECYCLE:Shutdown\n--- gt-m1r4v ---\nAgent gastown/nux shutting down. Session bcc-wisp-x8k3m ending.",
+            )},
+        ],
+        "expected_tools": {"check_git_state", "gt_polecat_nuke"},
+        "description": "Lifecycle shutdown → verify git state or nuke",
+    },
+    {
+        "name": "merged_notification",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Inbox="1 unread\n  bcc-m7j2p  from:gastown/refinery  MERGED\n--- bcc-m7j2p ---\nBranch feature/add-tests merged to main. Bead gt-4tp work complete.",
+                **{"Cleanup Wisps": "  hq-wisp-ragxshg  cleanup  gt-4tp (merge cleanup)"},
+            )},
+        ],
+        "expected_tools": {"bd_close"},
+        "description": "MERGED notification + cleanup wisp → close cleanup bead",
+    },
+    {
+        "name": "help_request",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ● bcc/rust  working\n    gt-kvo.6",
+                Inbox="1 unread\n  zfc-m8n6q  from:bcc/rust  HELP: Build failing on deps\n--- zfc-m8n6q ---\nWorking on hq-3mn2. Build failing on dependency resolution. Requesting witness assistance.",
+            )},
+        ],
+        "expected_tools": {"gt_mail_send", "gt_mail_read"},
+        "description": "HELP request → escalate to mayor or read details",
+    },
+    {
+        "name": "zombie_polecat",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ● gastown/chrome  working\n    bcc-wisp-gb0j5u\n\nSession bcc-wisp-gb0j5u not found in tmux. Agent state shows running.",
+                **{"Active Work": "zfc-9qw1 (in_progress, assigned to gastown/chrome)"},
+            )},
+        ],
+        "expected_tools": {"gt_mail_send", "gt_escalate"},
+        "description": "Zombie polecat (running state, dead session) → escalate",
+    },
+    {
+        "name": "stale_spawn",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Polecats="  ◐ hq/nitro  spawning\n    hq-wisp-2v214\n\nSpawning for 20 minutes. No activity detected.",
+            )},
+        ],
+        "expected_tools": {"gt_escalate", "gt_mail_send"},
+        "description": "Stale spawn >10min → escalate",
+    },
+    {
+        "name": "orphaned_bead",
+        "messages": [
+            {"role": "user", "content": _snap(
+                **{"Active Work": "bcc-8rlwh (in_progress, branch integration/beads-ide)\n  No assigned polecat found."},
+            )},
+        ],
+        "expected_tools": {"gt_mail_send"},
+        "description": "Orphaned bead with no polecat → notify mayor",
+    },
+    {
+        "name": "infra_down",
+        "messages": [
+            {"role": "user", "content": _snap(
+                Infrastructure="Deacon: dead\nRefinery: [error] session not found",
+            )},
+        ],
+        "expected_tools": {"gt_mail_send", "gt_escalate"},
+        "description": "Deacon + refinery both down → escalate",
+    },
+]
+
+# Default: use rich scenarios
+SCENARIOS = SCENARIOS_RICH
 
 
 def load_model(checkpoint_path: str):
@@ -282,6 +479,55 @@ def evaluate_eval_set(model, tokenizer, eval_path: str, system_prompt: str,
     }
 
 
+def evaluate_regression(model, tokenizer, system_prompt: str) -> dict:
+    """Run regression: evaluate original 8 scenarios in BOTH legacy and rich format."""
+    print(f"\n{'='*70}")
+    print("REGRESSION: Legacy vs Rich format (original 8 scenarios)")
+    print(f"{'='*70}")
+
+    # Only compare the first 8 scenarios which exist in both formats
+    legacy_names = {s["name"] for s in SCENARIOS_LEGACY}
+    rich_by_name = {s["name"]: s for s in SCENARIOS_RICH}
+
+    results = []
+    for legacy_s in SCENARIOS_LEGACY:
+        name = legacy_s["name"]
+        if name not in rich_by_name:
+            continue
+
+        rich_s = rich_by_name[name]
+
+        # Legacy
+        out_l, lat_l = generate_response(model, tokenizer, legacy_s["messages"], system_prompt)
+        parsed_l = parse_json_output(out_l)
+        tool_l = parsed_l.get("tool", "") if parsed_l else ""
+        correct_l = tool_l in legacy_s["expected_tools"]
+
+        # Rich
+        out_r, lat_r = generate_response(model, tokenizer, rich_s["messages"], system_prompt)
+        parsed_r = parse_json_output(out_r)
+        tool_r = parsed_r.get("tool", "") if parsed_r else ""
+        correct_r = tool_r in rich_s["expected_tools"]
+
+        match = "MATCH" if correct_l == correct_r else "DRIFT"
+        print(f"\n  [{match:5s}] {name}")
+        print(f"         Legacy: tool={tool_l!r} correct={correct_l}")
+        print(f"         Rich:   tool={tool_r!r} correct={correct_r}")
+
+        results.append({
+            "scenario": name,
+            "legacy_tool": tool_l,
+            "legacy_correct": correct_l,
+            "rich_tool": tool_r,
+            "rich_correct": correct_r,
+            "match": correct_l == correct_r,
+        })
+
+    n_match = sum(1 for r in results if r["match"])
+    print(f"\n  Regression: {n_match}/{len(results)} scenarios match between formats")
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a fine-tuned witness model")
     parser.add_argument("--checkpoint", type=str, required=True,
@@ -294,6 +540,11 @@ def main():
                         help="Max new tokens to generate")
     parser.add_argument("--output", type=str, default=None,
                         help="Output file for results JSON")
+    parser.add_argument("--scenarios", choices=["rich", "legacy", "both"],
+                        default="rich",
+                        help="Which scenario set to run (default: rich)")
+    parser.add_argument("--regression", action="store_true",
+                        help="Run regression: compare legacy vs rich format on original 8")
     args = parser.parse_args()
 
     system_prompt = """You are a Witness agent. You respond ONLY with JSON tool calls.
@@ -308,8 +559,33 @@ Available tools: gt_polecat_list, gt_polecat_nuke, gt_peek, gt_session_status, g
 
     model, tokenizer = load_model(args.checkpoint)
 
+    # Select scenario set
+    if args.scenarios == "legacy":
+        scenarios = SCENARIOS_LEGACY
+    elif args.scenarios == "both":
+        # Deduplicate by name, preferring rich
+        seen = set()
+        scenarios = []
+        for s in SCENARIOS_RICH:
+            seen.add(s["name"])
+            scenarios.append(s)
+        for s in SCENARIOS_LEGACY:
+            if s["name"] not in seen:
+                scenarios.append(s)
+    else:
+        scenarios = SCENARIOS_RICH
+
+    # Temporarily swap SCENARIOS for evaluate_scenarios
+    global SCENARIOS
+    SCENARIOS = scenarios
+
     # Scenario evaluation (always run)
     scenario_results = evaluate_scenarios(model, tokenizer, system_prompt)
+
+    # Regression mode (optional)
+    regression_results = None
+    if args.regression:
+        regression_results = evaluate_regression(model, tokenizer, system_prompt)
 
     # Eval set evaluation (optional)
     eval_set_results = None
@@ -330,10 +606,15 @@ Available tools: gt_polecat_list, gt_polecat_nuke, gt_peek, gt_session_status, g
     n_correct = sum(1 for r in scenario_results if r["correct_tool"])
     avg_lat = sum(r["latency_ms"] for r in scenario_results) / n_scenarios
 
-    print(f"\nScenarios ({n_scenarios} total):")
+    print(f"\nScenarios ({n_scenarios} total, format={args.scenarios}):")
     print(f"  JSON valid:    {n_valid}/{n_scenarios} ({n_valid/n_scenarios*100:.0f}%)")
     print(f"  Correct tool:  {n_correct}/{n_scenarios} ({n_correct/n_scenarios*100:.0f}%)")
     print(f"  Avg latency:   {avg_lat:.0f}ms")
+
+    if regression_results:
+        n_match = sum(1 for r in regression_results if r["match"])
+        print(f"\nRegression ({len(regression_results)} scenarios):")
+        print(f"  Format match:  {n_match}/{len(regression_results)}")
 
     if eval_set_results:
         print(f"\nEval set ({eval_set_results['total_turns']} turns):")
@@ -349,6 +630,7 @@ Available tools: gt_polecat_list, gt_polecat_nuke, gt_peek, gt_session_status, g
     )
     all_results = {
         "checkpoint": args.checkpoint,
+        "scenario_format": args.scenarios,
         "scenario_summary": {
             "n_scenarios": n_scenarios,
             "valid_json_rate": n_valid / n_scenarios,
@@ -357,6 +639,8 @@ Available tools: gt_polecat_list, gt_polecat_nuke, gt_peek, gt_session_status, g
         },
         "scenarios": scenario_results,
     }
+    if regression_results:
+        all_results["regression"] = regression_results
     if eval_set_results:
         all_results["eval_set"] = eval_set_results
 
